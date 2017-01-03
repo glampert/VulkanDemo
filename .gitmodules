@@ -7,3 +7,6 @@
 [submodule "Source/External/str"]
 	path = Source/External/str
 	url = git@github.com:glampert/str.git
+[submodule "Source/External/enum_helpers"]
+	path = Source/External/enum_helpers
+	url = git@github.com:glampert/enum_helpers.git
