@@ -47,6 +47,9 @@ struct Hash32 final
         buffer[Size - 1] = '\0';
         return buffer;
     }
+
+    bool operator == (const Hash32 other) const { return this->value == other.value; }
+    bool operator != (const Hash32 other) const { return this->value != other.value; }
 };
 
 // ========================================================
@@ -75,6 +78,9 @@ struct Hash64 final
         buffer[Size - 1] = '\0';
         return buffer;
     }
+
+    bool operator == (const Hash64 other) const { return this->value == other.value; }
+    bool operator != (const Hash64 other) const { return this->value != other.value; }
 };
 
 } // namespace VkToolbox

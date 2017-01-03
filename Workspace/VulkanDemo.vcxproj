@@ -158,6 +158,7 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="..\Source\External\Common.cpp" />
     <ClCompile Include="..\Source\Main.cpp">
       <OmitFramePointers Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</OmitFramePointers>
       <Optimization Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Full</Optimization>
@@ -169,6 +170,9 @@
     <ClCompile Include="..\Source\VkToolbox\Texture.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="..\Source\External\hash_index\hash_index.hpp" />
+    <ClInclude Include="..\Source\External\str\str.hpp" />
+    <ClInclude Include="..\Source\External\vectormath\vectormath.hpp" />
     <ClInclude Include="..\Source\VkToolbox\GlslShader.hpp" />
     <ClInclude Include="..\Source\VkToolbox\Hashing.hpp" />
     <ClInclude Include="..\Source\VkToolbox\Resource.hpp" />

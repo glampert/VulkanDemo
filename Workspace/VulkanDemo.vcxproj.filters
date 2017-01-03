@@ -31,6 +31,9 @@
     <ClCompile Include="..\Source\VkToolbox\Hashing.cpp">
       <Filter>Source Files\VkToolbox</Filter>
     </ClCompile>
+    <ClCompile Include="..\Source\External\Common.cpp">
+      <Filter>Source Files\External</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\Source\VkToolbox\Resource.hpp">
@@ -47,6 +50,15 @@
     </ClInclude>
     <ClInclude Include="..\Source\VkToolbox\Hashing.hpp">
       <Filter>Source Files\VkToolbox</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Source\External\hash_index\hash_index.hpp">
+      <Filter>Source Files\External</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Source\External\str\str.hpp">
+      <Filter>Source Files\External</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Source\External\vectormath\vectormath.hpp">
+      <Filter>Source Files\External</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>
