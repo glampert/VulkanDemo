@@ -1,3 +1,3 @@
-[submodule ".\\Source\\External\\str"]
-	path = .\\Source\\External\\str
+[submodule "/Source/External/str"]
+	path = /Source/External/str
 	url = git@github.com:glampert/str.git
