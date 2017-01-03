@@ -2,3 +2,6 @@
 [submodule "Source/External/hash_index"]
 	path = Source/External/hash_index
 	url = git@github.com:glampert/hash_index.git
+[submodule "Source/External/vectormath"]
+	path = Source/External/vectormath
+	url = git@github.com:glampert/vectormath.git
