@@ -5,3 +5,6 @@
 [submodule "Source/External/vectormath"]
 	path = Source/External/vectormath
 	url = git@github.com:glampert/vectormath.git
+[submodule "Source/External/str"]
+	path = Source/External/str
+	url = git@github.com:glampert/str.git
