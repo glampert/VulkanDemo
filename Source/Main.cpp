@@ -17,14 +17,17 @@ Vk demo idea 2:
    git submodule add git@github.com:glampert/foo.git
    git commit -am 'added foo module'
    git push
+
+ Updating the submodules:
+   git submodule update --recursive --remote
 */
 
 #include <cstdio>
 #include <cassert>
+#include <iostream>
+#include <array>
 
-#include "External/str/str.hpp"
-#include "External/hash_index/hash_index.hpp"
-#include "External/vectormath/vectormath.hpp"
+#include "External/External.hpp"
 
 #include "VkToolbox/ResourceManager.hpp"
 using namespace VkToolbox;
@@ -34,8 +37,83 @@ Hash64 get_h64() { return Hash64{ "Hello world" }; }
 Hash32 get_h32z() { return Hash32{ "" }; }
 Hash64 get_h64z() { return Hash64{ "" }; }
 
+enum class Foo
+{
+    Bar, Baz, Fooz,
+    Count
+};
+void enum_helpers_sample()
+{
+    //
+    // enum_iterator:
+    //
+
+    enum_iterator<Foo> iter;
+
+    for (auto c : iter)
+    {
+        std::cout << "Foo = " << static_cast<int>(c) << "\n";
+    }
+
+    std::cout << "\n";
+
+    for (auto c = iter.begin(); c != iter.end(); ++c)
+    {
+        std::cout << "Foo = " << static_cast<int>(*c) << "\n";
+    }
+
+    std::cout << "\n";
+
+    auto a = std::begin(iter);
+    auto b = std::begin(iter);
+
+    ENUM_HELPERS_ASSERT(a == b);
+    ENUM_HELPERS_ASSERT(*(a++) == Foo::Bar);
+    ENUM_HELPERS_ASSERT(*(++b) == Foo::Baz);
+
+    //
+    // enum_array:
+    //
+
+    const enum_array<Foo, std::string> FooStrings{ { "Bar", "Baz", "Fooz" } };
+
+    // Keys give you the constants associated with each array index.
+    for (auto k : FooStrings.keys())
+    {
+        std::cout << "Foo = " << static_cast<int>(k) << "\n";
+    }
+
+    std::cout << "\n";
+
+    // Using iterators or [] give the array values.
+    for (const auto & s : FooStrings)
+    {
+        std::cout << "Foo as string = " << s.c_str() << "\n";
+    }
+
+    std::cout << "\n";
+
+    for (auto i = FooStrings.rbegin(); i != FooStrings.rend(); ++i)
+    {
+        std::cout << "Foo as string (reverse iteration) = " << (*i).c_str() << "\n";
+    }
+
+    auto x = std::begin(FooStrings);
+    ENUM_HELPERS_ASSERT(*x == "Bar");
+    ++x;
+    ENUM_HELPERS_ASSERT(*x == "Baz");
+    ++x;
+    ENUM_HELPERS_ASSERT(*x == "Fooz");
+
+    ENUM_HELPERS_ASSERT(FooStrings[Foo::Bar]  == "Bar");
+    ENUM_HELPERS_ASSERT(FooStrings[Foo::Baz]  == "Baz");
+    ENUM_HELPERS_ASSERT(FooStrings[Foo::Fooz] == "Fooz");
+}
+
 int main()
 {
+    enum_helpers_sample();
+
     char buffer[64];
     std::printf("hash32: %s\n",  get_h32().toString(buffer));
     std::printf("hash64: %s\n",  get_h64().toString(buffer));
@@ -49,8 +127,13 @@ int main()
     hash_index<> hi;
     hi.set_granularity(10);
 
+    hash_index<> hi2{hi};
+    (void)hi2;
+
     Vector4 v4{4.4f};
     print(v4);
+
+    std::printf("sizeof(ResourceId) = %zu\n", sizeof(ResourceId));
 
     str16 s16{"hello"};
     std::printf("%s world\n", s16.c_str());

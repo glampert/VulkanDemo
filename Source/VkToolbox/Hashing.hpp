@@ -17,10 +17,15 @@ namespace VkToolbox
 {
 
 // ========================================================
+// Murmur hash function; See:
+// https://en.wikipedia.org/wiki/MurmurHash
+// ========================================================
 
 std::uint32_t MurmurHash32(const void * key, std::size_t len, std::uint32_t seed = 0);
 std::uint64_t MurmurHash64(const void * key, std::size_t len, std::uint64_t seed = 0);
 
+// ========================================================
+// struct Hash32:
 // ========================================================
 
 struct Hash32 final
@@ -52,6 +57,8 @@ struct Hash32 final
     bool operator != (const Hash32 other) const { return this->value != other.value; }
 };
 
+// ========================================================
+// struct Hash64:
 // ========================================================
 
 struct Hash64 final

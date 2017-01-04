@@ -11,7 +11,22 @@
 
 namespace VkToolbox
 {
-   
+
+// ========================================================
+// struct ResourceId:
+// ========================================================
+
+ResourceId ResourceId::getNull()
+{
+    static const str    s_nullName;
+    static const Hash64 s_nullHash;
+    return { &s_nullName, s_nullHash };
+}
+
+// ========================================================
+// class Resource:
+// ========================================================
+
 Resource::Resource(VkDevice device, ResourceId id)
     : m_device{ device }
     , m_resId{ id }

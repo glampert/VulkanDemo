@@ -31,7 +31,7 @@
     <ClCompile Include="..\Source\VkToolbox\Hashing.cpp">
       <Filter>Source Files\VkToolbox</Filter>
     </ClCompile>
-    <ClCompile Include="..\Source\External\Common.cpp">
+    <ClCompile Include="..\Source\External\External.cpp">
       <Filter>Source Files\External</Filter>
     </ClCompile>
   </ItemGroup>
@@ -58,6 +58,12 @@
       <Filter>Source Files\External</Filter>
     </ClInclude>
     <ClInclude Include="..\Source\External\vectormath\vectormath.hpp">
+      <Filter>Source Files\External</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Source\External\enum_helpers\enum_helpers.hpp">
+      <Filter>Source Files\External</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Source\External\External.hpp">
       <Filter>Source Files\External</Filter>
     </ClInclude>
   </ItemGroup>

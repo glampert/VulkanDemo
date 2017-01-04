@@ -9,11 +9,12 @@
 // ================================================================================================
 
 #include "Hashing.hpp"
+#include "../External/External.hpp"
 
 namespace VkToolbox
 {
 
-//TODO temp
+//TODO temp until we actually link with the library!
 #define VK_NULL_HANDLE nullptr
 typedef void* VkDevice;
 
@@ -23,11 +24,10 @@ typedef void* VkDevice;
 
 struct ResourceId final
 {
-    static ResourceId getNull() {return {};}
+    const str * name; // Reference to string pool.
+    Hash64      hash; // Hash of name string.
 
-    //TODO
-    //str  name;
-    Hash64 hash;
+    static ResourceId getNull();
 };
 
 // ========================================================
