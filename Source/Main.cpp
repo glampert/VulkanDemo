@@ -30,6 +30,7 @@ Vk demo idea 2:
 #include "External/External.hpp"
 
 #include "VkToolbox/ResourceManager.hpp"
+#include "VkToolbox/StringRegistry.hpp"
 using namespace VkToolbox;
 
 Hash32 get_h32() { return Hash32{ "Hello world" }; }
@@ -110,8 +111,55 @@ void enum_helpers_sample()
     ENUM_HELPERS_ASSERT(FooStrings[Foo::Fooz] == "Fooz");
 }
 
+// ================================================================================================
+// ================================================================================================
+
 int main()
 {
+    {
+        Hash32 hs32{ 0 };
+        Hash32 hs32_2{ 0xF0F0 };
+        Hash32 hss{ "hello" };
+
+        Hash64 hs64{ 0 };
+        Hash64 hs642{ 42 };
+        Hash64 hs643{ "hello" };
+    }
+
+    StringRegistry str_reg;
+    {
+        auto a = str_reg.get("foo");
+        auto b = str_reg.get("bar");
+        
+        auto d = str_reg.get("foo");
+        auto e = str_reg.get("bar");
+
+        assert(a == d);
+        assert(b == e);
+
+        str_reg.shutdown();
+    }
+
+    VkInstanceCreateInfo createInfo;
+    createInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
+    createInfo.pNext = nullptr;
+    createInfo.flags = 0;
+    createInfo.pApplicationInfo = nullptr;
+    createInfo.enabledLayerCount = 0;
+    createInfo.ppEnabledLayerNames = nullptr;
+    createInfo.enabledExtensionCount = 0;
+    createInfo.ppEnabledExtensionNames = nullptr;
+
+    VkInstance instance = VK_NULL_HANDLE;
+
+    VkResult res = vkCreateInstance(&createInfo, nullptr, &instance);
+    assert(res == VK_SUCCESS);
+
+    GlslShaderManager shrdMgr{ nullptr };
+    TextureManager txdMgr{ nullptr };
+
+    vkDestroyInstance(instance, nullptr);
+
     enum_helpers_sample();
 
     char buffer[64];

@@ -8,15 +8,12 @@
 // Brief: Base graphics resource type for shaders, textures, render-buffers, etc.
 // ================================================================================================
 
+#include <vulkan/vulkan.h>
+#include "External.hpp"
 #include "Hashing.hpp"
-#include "../External/External.hpp"
 
 namespace VkToolbox
 {
-
-//TODO temp until we actually link with the library!
-#define VK_NULL_HANDLE nullptr
-typedef void* VkDevice;
 
 // ========================================================
 // struct ResourceId:
@@ -27,6 +24,10 @@ struct ResourceId final
     const str * name; // Reference to string pool.
     Hash64      hash; // Hash of name string.
 
+    bool operator == (const ResourceId & other) const { return this->hash == other.hash; }
+    bool operator != (const ResourceId & other) const { return this->hash != other.hash; }
+
+    bool isNull() const { return hash.value == 0; }
     static ResourceId getNull();
 };
 

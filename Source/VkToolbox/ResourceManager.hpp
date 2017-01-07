@@ -8,11 +8,11 @@
 // Brief: Base template for the resource registries/managers.
 // ================================================================================================
 
+#include "Utils.hpp"
 #include "Resource.hpp"
 #include "Texture.hpp"
 #include "GlslShader.hpp"
 
-#include <cassert>
 #include <cstdint>
 #include <vector>
 
@@ -26,13 +26,14 @@ public:
 
     using ResourceType  = T;
     using ResourceIndex = std::uint32_t;
+    static constexpr ResourceIndex InvalidResIndex = ~static_cast<ResourceIndex>(0);
 
     // Not copyable.
     ResourceManager(const ResourceManager &) = delete;
     ResourceManager & operator = (const ResourceManager &) = delete;
 
-    // No special initialization required.
-    ResourceManager() = default;
+    // Init with the VK device that will own all the resources.
+    explicit ResourceManager(VkDevice device);
 
     // Preallocate storage for a number of resources. The parameter is merely a hint.
     void preallocate(int resourceCount);
@@ -58,9 +59,6 @@ public:
     // Unload given resource at slot.
     bool unload(ResourceIndex resIndex);
 
-    // Remove the given slot and also unload the associated resource.
-    bool unregisterSlot(ResourceIndex resIndex);
-
     // Attempt to reload all registered resources.
     void reloadAll(int * outNumReloaded = nullptr, int * outNumFailed = nullptr);
 
@@ -80,9 +78,14 @@ public:
 
 private:
 
+    // Expand the resource store by one item and also register the new index into the LUT.
+    ResourceIndex createNewSlot(ResourceId id);
+
+    using HashIndex = hash_index<ResourceIndex, std::uint64_t>;
+
+    VkDevice       m_device;
     std::vector<T> m_resourcesStore;
-    //TODO
-    //hash_index<> m_resourcesLookupTable;
+    HashIndex      m_resourcesLookupTable;
 };
 
 // ========================================================
@@ -97,6 +100,21 @@ using TextureManager    = ResourceManager<Texture>;
 // ========================================================
 
 template<typename T>
+ResourceManager<T>::ResourceManager(VkDevice device)
+    : m_device{ device }
+{
+}
+
+template<typename T>
+typename ResourceManager<T>::ResourceIndex ResourceManager<T>::createNewSlot(const ResourceId id)
+{
+    m_resourcesStore.emplace_back(m_device, id);
+    const auto index = narrow_cast<ResourceIndex>(m_resourcesStore.size() - 1);
+    m_resourcesLookupTable.insert(id.hash.value, index);
+    return index;
+}
+
+template<typename T>
 void ResourceManager<T>::preallocate(const int resourceCount)
 {
     if (resourceCount > 0)
@@ -108,75 +126,145 @@ void ResourceManager<T>::preallocate(const int resourceCount)
 template<typename T>
 bool ResourceManager<T>::findLoaded(const ResourceId inResId, ResourceIndex * outResIndex) const
 {
-    return false; //TODO
+    assert(!inResId.isNull());
+    assert(outResIndex != nullptr);
+
+    const auto index = m_resourcesLookupTable.find(inResId.hash.value, inResId, m_resourcesStore,
+                                                   [](const ResourceId & key, const T & item) {
+                                                       return key == item.getId();
+                                                   });
+
+    if (index == HashIndex::null_index)
+    {
+        (*outResIndex) = InvalidResIndex;
+        return false; // Not registered
+    }
+
+    if (!m_resourcesStore[index].isLoaded())
+    {
+        (*outResIndex) = InvalidResIndex;
+        return false; // Not loaded
+    }
+
+    (*outResIndex) = index;
+    return true;
 }
 
 template<typename T>
 bool ResourceManager<T>::findOrLoad(const ResourceId inResId, ResourceIndex * outResIndex)
 {
-    return false; //TODO
+    assert(!inResId.isNull());
+    assert(outResIndex != nullptr);
+
+    auto index = m_resourcesLookupTable.find(inResId.hash.value, inResId, m_resourcesStore,
+                                             [](const ResourceId & key, const T & item) {
+                                                 return key == item.getId();
+                                             });
+
+    if (index == HashIndex::null_index) // Register the slot if needed
+    {
+        index = createNewSlot(inResId);
+    }
+
+    // Slot stays registered for future load attempts even if we can't load now.
+    const bool loaded = m_resourcesStore[index].load();
+    (*outResIndex) = index;
+    return loaded;
 }
 
 template<typename T>
 bool ResourceManager<T>::registerSlot(const ResourceId inResId, ResourceIndex * outResIndex)
 {
-    return false; //TODO
+    assert(!inResId.isNull());
+    assert(outResIndex != nullptr);
+
+    auto index = m_resourcesLookupTable.find(inResId.hash.value, inResId, m_resourcesStore,
+                                             [](const ResourceId & key, const T & item) {
+                                                 return key == item.getId();
+                                             });
+
+    // Register new or just return existing:
+    if (index == HashIndex::null_index)
+    {
+        index = createNewSlot(inResId);
+    }
+
+    (*outResIndex) = index;
+    return true;
 }
 
 template<typename T>
 bool ResourceManager<T>::isRegistered(const ResourceId inResId) const
 {
-    return false; //TODO
+    assert(!inResId.isNull());
+    const auto index = m_resourcesLookupTable.find(inResId.hash.value, inResId, m_resourcesStore,
+                                                   [](const ResourceId & key, const T & item) {
+                                                       return key == item.getId();
+                                                   });
+    return index != HashIndex::null_index;
 }
 
 template<typename T>
 bool ResourceManager<T>::isLoaded(const ResourceIndex resIndex) const
 {
-    return false; //TODO
+    return getResourceRef(resIndex).isLoaded();
 }
 
 template<typename T>
 bool ResourceManager<T>::reload(const ResourceIndex resIndex)
 {
-    return false; //TODO
+    return getResourceRef(resIndex).load();
 }
 
 template<typename T>
 bool ResourceManager<T>::unload(const ResourceIndex resIndex)
 {
-    return false; //TODO
-}
-
-template<typename T>
-bool ResourceManager<T>::unregisterSlot(const ResourceIndex resIndex)
-{
-    return false; //TODO
+    return getResourceRef(resIndex).unload();
 }
 
 template<typename T>
 void ResourceManager<T>::reloadAll(int * outNumReloaded, int * outNumFailed)
 {
-     //TODO
+    int numReloaded = 0;
+    int numFailed   = 0;
+
+    for (auto & resource : m_resourcesStore)
+    {
+        if (resource.load())
+        {
+            ++numReloaded;
+        }
+        else
+        {
+            ++numFailed;
+        }
+    }
+
+    if (outNumReloaded != nullptr) { (*outNumReloaded) = numReloaded; }
+    if (outNumFailed   != nullptr) { (*outNumFailed)   = numFailed;   }
 }
 
 template<typename T>
 void ResourceManager<T>::unloadAll()
 {
-     //TODO
+    for (auto & resource : m_resourcesStore)
+    {
+        resource.unload();
+    }
 }
 
 template<typename T>
 void ResourceManager<T>::unregisterAll()
 {
-     //TODO
+    unloadAll();
+    m_resourcesLookupTable.clear();
+    m_resourcesStore.clear();
 }
 
 template<typename T>
 int ResourceManager<T>::getResourceCount() const
 {
-    //TODO
-    //assert(m_resourcesStore.size() == m_resourcesLookupTable.size());
-    return static_cast<int>(m_resourcesStore.size());
+    return narrow_cast<int>(m_resourcesStore.size());
 }
 
 template<typename T>

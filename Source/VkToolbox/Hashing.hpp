@@ -12,6 +12,7 @@
 #include <cstdint>
 #include <cstring>
 #include <cstdio>
+#include <type_traits>
 
 namespace VkToolbox
 {
@@ -35,12 +36,17 @@ struct Hash32 final
     Hash32()
         : value{ 0 }
     { }
-    explicit Hash32(const std::uint32_t h)
-        : value{ h }
+
+    // Using enable_if to disambiguate 0, since it also converts to pointer
+    template<typename Integer, typename = std::enable_if_t<std::is_integral<Integer>::value>>
+    explicit Hash32(const Integer h)
+        : value{ static_cast<std::uint32_t>(h) }
     { }
+
     explicit Hash32(const char * const s)
         : value{ MurmurHash32(s, std::strlen(s)) }
     { }
+
     Hash32(const char * const s, const std::size_t len)
         : value{ MurmurHash32(s, len) }
     { }
@@ -68,12 +74,16 @@ struct Hash64 final
     Hash64()
         : value{ 0 }
     { }
-    explicit Hash64(const std::uint64_t h)
-        : value{ h }
+
+    template<typename Integer, typename = std::enable_if_t<std::is_integral<Integer>::value>>
+    explicit Hash64(const Integer h)
+        : value{ static_cast<std::uint64_t>(h) }
     { }
+
     explicit Hash64(const char * const s)
         : value{ MurmurHash64(s, std::strlen(s)) }
     { }
+
     Hash64(const char * const s, const std::size_t len)
         : value{ MurmurHash64(s, len) }
     { }
