@@ -19,7 +19,7 @@ namespace VkToolbox
 // on GitHub: https://github.com/aappleby/smhasher/blob/master/src/MurmurHash2.cpp
 //---------------------------------------------------------------------------------
 
-std::uint32_t MurmurHash32(const void * key, std::size_t len, std::uint32_t seed)
+std::uint32_t murmurHash32(const void * key, std::size_t len, std::uint32_t seed)
 {
     assert(key != nullptr);
     assert(len <= UINT32_MAX);
@@ -70,7 +70,7 @@ std::uint32_t MurmurHash32(const void * key, std::size_t len, std::uint32_t seed
     return h;
 }
 
-std::uint64_t MurmurHash64(const void * key, std::size_t len, std::uint64_t seed)
+std::uint64_t murmurHash64(const void * key, std::size_t len, std::uint64_t seed)
 {
     assert(key != nullptr);
 

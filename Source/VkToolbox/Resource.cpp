@@ -27,7 +27,7 @@ ResourceId ResourceId::getNull()
 // class Resource:
 // ========================================================
 
-Resource::Resource(VkDevice device, ResourceId id)
+Resource::Resource(WeakHandle<VkDevice> device, ResourceId id)
     : m_device{ device }
     , m_resId{ id }
 {

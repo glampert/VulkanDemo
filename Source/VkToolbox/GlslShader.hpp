@@ -18,7 +18,7 @@ class GlslShader final
 {
 public:
 
-    GlslShader(VkDevice device, ResourceId id);
+    GlslShader(WeakHandle<VkDevice> device, ResourceId id);
     ~GlslShader();
 
     // Movable.

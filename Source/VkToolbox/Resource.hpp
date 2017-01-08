@@ -11,6 +11,7 @@
 #include <vulkan/vulkan.h>
 #include "External.hpp"
 #include "Hashing.hpp"
+#include "Utils.hpp"
 
 namespace VkToolbox
 {
@@ -43,7 +44,7 @@ public:
     Resource(const Resource &) = delete;
     Resource & operator = (const Resource &) = delete;
 
-    Resource(VkDevice device, ResourceId id);
+    Resource(WeakHandle<VkDevice> device, ResourceId id);
     virtual ~Resource();
 
     // Load or reload the resource from file.
@@ -60,16 +61,16 @@ public:
     virtual bool isShutdown() const = 0;
 
     // Common accessors:
-    VkDevice   getDevice() const { return m_device; }
-    ResourceId getId()     const { return m_resId;  }
+    WeakHandle<VkDevice> getDevice() const { return m_device; }
+    ResourceId getId() const { return m_resId; }
 
 protected:
 
     // Reset the device handle and id to null/invalid states.
     virtual void clear();
 
-    VkDevice   m_device;
-    ResourceId m_resId;
+    WeakHandle<VkDevice> m_device;
+    ResourceId           m_resId;
 };
 
 } // namespace VkToolbox

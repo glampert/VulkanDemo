@@ -18,7 +18,7 @@ class Texture final
 {
 public:
 
-    Texture(VkDevice device, ResourceId id);
+    Texture(WeakHandle<VkDevice> device, ResourceId id);
     ~Texture();
 
     // Movable.

@@ -31,6 +31,7 @@ Vk demo idea 2:
 
 #include "VkToolbox/ResourceManager.hpp"
 #include "VkToolbox/StringRegistry.hpp"
+#include "VkToolbox/Log.hpp"
 using namespace VkToolbox;
 
 Hash32 get_h32() { return Hash32{ "Hello world" }; }
@@ -116,6 +117,11 @@ void enum_helpers_sample()
 
 int main()
 {
+    //Log::setVerbosityLevel(Log::VerbosityLevel::Error);
+    Log::debugF("A debug message");
+    Log::warningF("A warning message");
+    Log::errorF("An error message");
+
     {
         Hash32 hs32{ 0 };
         Hash32 hs32_2{ 0xF0F0 };
@@ -124,6 +130,12 @@ int main()
         Hash64 hs64{ 0 };
         Hash64 hs642{ 42 };
         Hash64 hs643{ "hello" };
+
+        char buf1[64];
+        std::printf("h=%s\n", hs643.toString(buf1));
+
+        char buf2[5];
+        std::printf("h2=%s\n", hs643.toString(buf2));
     }
 
     StringRegistry str_reg;
@@ -185,5 +197,5 @@ int main()
 
     str16 s16{"hello"};
     std::printf("%s world\n", s16.c_str());
-    getchar();
+    (void)getchar();
 }

@@ -12,7 +12,7 @@
 namespace VkToolbox
 {
 
-Texture::Texture(VkDevice device, ResourceId id)
+Texture::Texture(WeakHandle<VkDevice> device, ResourceId id)
     : Resource{ device, id }
 {
 }

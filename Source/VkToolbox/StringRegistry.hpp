@@ -22,7 +22,7 @@ struct HashStr final
 {
     std::size_t operator()(const str * const s) const
     {
-        return MurmurHash64(s->c_str(), s->length());
+        return murmurHash64(s->c_str(), s->length());
     }
 };
 

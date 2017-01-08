@@ -8,7 +8,6 @@
 // Brief: Base template for the resource registries/managers.
 // ================================================================================================
 
-#include "Utils.hpp"
 #include "Resource.hpp"
 #include "Texture.hpp"
 #include "GlslShader.hpp"
@@ -33,7 +32,7 @@ public:
     ResourceManager & operator = (const ResourceManager &) = delete;
 
     // Init with the VK device that will own all the resources.
-    explicit ResourceManager(VkDevice device);
+    explicit ResourceManager(WeakHandle<VkDevice> device);
 
     // Preallocate storage for a number of resources. The parameter is merely a hint.
     void preallocate(int resourceCount);
@@ -83,9 +82,9 @@ private:
 
     using HashIndex = hash_index<ResourceIndex, std::uint64_t>;
 
-    VkDevice       m_device;
-    std::vector<T> m_resourcesStore;
-    HashIndex      m_resourcesLookupTable;
+    WeakHandle<VkDevice> m_device;
+    std::vector<T>       m_resourcesStore;
+    HashIndex            m_resourcesLookupTable;
 };
 
 // ========================================================
@@ -100,7 +99,7 @@ using TextureManager    = ResourceManager<Texture>;
 // ========================================================
 
 template<typename T>
-ResourceManager<T>::ResourceManager(VkDevice device)
+ResourceManager<T>::ResourceManager(WeakHandle<VkDevice> device)
     : m_device{ device }
 {
 }
@@ -109,7 +108,7 @@ template<typename T>
 typename ResourceManager<T>::ResourceIndex ResourceManager<T>::createNewSlot(const ResourceId id)
 {
     m_resourcesStore.emplace_back(m_device, id);
-    const auto index = narrow_cast<ResourceIndex>(m_resourcesStore.size() - 1);
+    const auto index = narrowCast<ResourceIndex>(m_resourcesStore.size() - 1);
     m_resourcesLookupTable.insert(id.hash.value, index);
     return index;
 }
@@ -264,7 +263,7 @@ void ResourceManager<T>::unregisterAll()
 template<typename T>
 int ResourceManager<T>::getResourceCount() const
 {
-    return narrow_cast<int>(m_resourcesStore.size());
+    return narrowCast<int>(m_resourcesStore.size());
 }
 
 template<typename T>

@@ -12,7 +12,7 @@
 namespace VkToolbox
 {
 
-GlslShader::GlslShader(VkDevice device, ResourceId id)
+GlslShader::GlslShader(WeakHandle<VkDevice> device, ResourceId id)
     : Resource{ device, id }
 {
 }
