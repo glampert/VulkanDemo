@@ -9,8 +9,9 @@
 
 #include "Log.hpp"
 #include "Utils.hpp"
+#include <cstdlib>
 
-#if (WIN32 || WIN64)
+#if defined(WIN32) || defined(WIN64)
     #define NOMINMAX 1
     #define WIN32_LEAN_AND_MEAN 1
     #include <Windows.h>
@@ -122,6 +123,30 @@ void errorF(VKTB_PRINTF_LIKE const char * fmt, ...)
 
     printLine("[error]", buffer);
 }
+
+void fatalF(VKTB_PRINTF_LIKE const char * fmt, ...)
+{
+    // Fatal errors always print, unless the log is silent.
+    if (s_verbosityLevel != VerbosityLevel::Silent)
+    {
+        va_list vaArgs;
+        char buffer[PrintfBufferSize];
+
+        va_start(vaArgs, fmt);
+        std::vsnprintf(buffer, arrayLength(buffer), fmt, vaArgs);
+        va_end(vaArgs);
+
+        printLine("[error] <FATAL>", buffer);
+    }
+
+    #if (DEBUG && (defined(WIN32) || defined(WIN64)))
+    DebugBreak(); // Windows-specific
+    #else // !DEBUG or !WIN
+    std::abort();
+    #endif // DEBUG and WIN
+}
+
+// ========================================================
 
 } // namespace Log
 } // namespace VkToolbox

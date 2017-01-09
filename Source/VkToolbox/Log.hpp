@@ -45,6 +45,7 @@ FILE* getOutputStream();
 void debugF(VKTB_PRINTF_LIKE const char * fmt, ...);
 void warningF(VKTB_PRINTF_LIKE const char * fmt, ...);
 void errorF(VKTB_PRINTF_LIKE const char * fmt, ...);
+void fatalF(VKTB_PRINTF_LIKE const char * fmt, ...);
 
 } // namespace Log
 } // namespace VkToolbox
