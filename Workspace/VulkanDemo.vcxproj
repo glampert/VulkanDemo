@@ -185,6 +185,7 @@
     <ClCompile Include="..\Source\VkToolbox\VulkanContext.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="..\Source\External\array_view\array_view.hpp" />
     <ClInclude Include="..\Source\External\enum_helpers\enum_helpers.hpp" />
     <ClInclude Include="..\Source\External\External.hpp" />
     <ClInclude Include="..\Source\External\hash_index\hash_index.hpp" />

@@ -96,5 +96,8 @@
     <ClInclude Include="..\Source\VkToolbox\VulkanContext.hpp">
       <Filter>Source Files\VkToolbox</Filter>
     </ClInclude>
+    <ClInclude Include="..\Source\External\array_view\array_view.hpp">
+      <Filter>Source Files\External\Libs</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>
