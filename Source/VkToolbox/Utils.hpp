@@ -9,6 +9,7 @@
 // ================================================================================================
 
 #include <cassert>
+#include <utility>
 #include <type_traits>
 
 namespace VkToolbox
@@ -47,6 +48,21 @@ constexpr std::size_t arrayLength(const T (&)[Size])
 {
     return Size;
 }
+
+// Width and height pair.
+struct Size2D final
+{
+    int width;
+    int height;
+};
+
+// Width, height and depth triplet.
+struct Size3D final
+{
+    int width;
+    int height;
+    int depth;
+};
 
 // ========================================================
 

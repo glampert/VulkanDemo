@@ -137,6 +137,7 @@ void fatalF(VKTB_PRINTF_LIKE const char * fmt, ...)
         va_end(vaArgs);
 
         printLine("[error] <FATAL>", buffer);
+        std::fflush(s_outputStream); // Make sure the log is not lost when we abort.
     }
 
     #if (DEBUG && (defined(WIN32) || defined(WIN64)))

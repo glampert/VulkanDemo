@@ -40,6 +40,12 @@
     <ClCompile Include="..\Source\VkToolbox\Log.cpp">
       <Filter>Source Files\VkToolbox</Filter>
     </ClCompile>
+    <ClCompile Include="..\Source\VkToolbox\OSWindow.cpp">
+      <Filter>Source Files\VkToolbox</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Source\VkToolbox\VulkanContext.cpp">
+      <Filter>Source Files\VkToolbox</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\Source\VkToolbox\Resource.hpp">
@@ -83,6 +89,12 @@
     </ClInclude>
     <ClInclude Include="..\Source\External\str\str.hpp">
       <Filter>Source Files\External\Libs</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Source\VkToolbox\OSWindow.hpp">
+      <Filter>Source Files\VkToolbox</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Source\VkToolbox\VulkanContext.hpp">
+      <Filter>Source Files\VkToolbox</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>
