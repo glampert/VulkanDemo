@@ -8,10 +8,9 @@
 // Brief: Base graphics resource type for shaders, textures, render-buffers, etc.
 // ================================================================================================
 
-#include <vulkan/vulkan.h>
+#include "VulkanContext.hpp"
 #include "External.hpp"
 #include "Hashing.hpp"
-#include "Utils.hpp"
 
 namespace VkToolbox
 {

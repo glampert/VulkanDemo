@@ -7,5 +7,9 @@
 // Brief: Definitions for the header-only libraries that need an implementation in a CPP file.
 // ================================================================================================
 
+#include "External.hpp"
+
+// ========================================================
 #define STR_IMPLEMENTATION 1
 #include "str/str.hpp"
+// ========================================================

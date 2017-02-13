@@ -75,8 +75,8 @@ private:
 
     // Fill patterns for debug allocations.
     #if DEBUG
-    static constexpr std::uint8_t AllocFillVal = 0xAA;
-    static constexpr std::uint8_t FreeFillVal  = 0xFE;
+    static constexpr std::uint8_t AllocFillVal = 0xCD; // 'Clean memory' -> New allocation
+    static constexpr std::uint8_t FreeFillVal  = 0xDD; // 'Dead memory'  -> Freed/deleted
     #endif // DEBUG
 
     union PoolObj

@@ -49,6 +49,14 @@ constexpr std::size_t arrayLength(const T (&)[Size])
     return Size;
 }
 
+// Clamp the input value between min and max (inclusive range).
+template<typename T>
+inline void clamp(T * inOutVal, const T minVal, const T maxVal)
+{
+    if      ((*inOutVal) < minVal) { (*inOutVal) = minVal; }
+    else if ((*inOutVal) > maxVal) { (*inOutVal) = maxVal; }
+}
+
 // Width and height pair.
 struct Size2D final
 {
