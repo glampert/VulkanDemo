@@ -8,18 +8,11 @@
 // Brief: Main Vulkan context and device class.
 // ================================================================================================
 
-// To enable vkCreateWin32SurfaceKHR extensions (note: Windows-specific!)
-#if (!defined(VK_USE_PLATFORM_WIN32_KHR) && (defined(WIN32) || defined(WIN64)))
-    #define VK_USE_PLATFORM_WIN32_KHR 1
-#endif // !VK_USE_PLATFORM_WIN32_KHR && Windows
-
 #include <vulkan/vulkan.h>
 #include <vector>
 
 #include "Utils.hpp"
 #include "Log.hpp"
-
-// ========================================================
 
 namespace VkToolbox
 {
@@ -41,14 +34,14 @@ public:
     };
 
     // Shared configurations for all contexts - these must be set before construction.
-    static const char *   appName;
-    static std::uint32_t  appVersion;
-    static std::uint32_t  multiSampleCount;
-    static VkFormat       depthFormat;
-    static ValidationMode validationMode;
+    static const char *   sm_appName;
+    static std::uint32_t  sm_appVersion;
+    static std::uint32_t  sm_multiSampleCount;
+    static VkFormat       sm_depthFormat;
+    static ValidationMode sm_validationMode;
 
     // Initialization.
-    VulkanContext(WeakRef<const OSWindow> window, WeakRef<const VkAllocationCallbacks> allocCbs = nullptr);
+    VulkanContext(WeakRef<const OSWindow> window, Size2D fbSize, WeakRef<const VkAllocationCallbacks> allocCbs = nullptr);
 
     // Not copyable.
     VulkanContext(const VulkanContext &) = delete;
@@ -73,6 +66,8 @@ public:
     // Misc getters:
     WeakRef<const OSWindow> getRenderWindow() const;
     WeakRef<const VkAllocationCallbacks> getAllocationCallbacks() const;
+    Size2D getRenderWindowSize() const;
+    Size2D getFramebufferSize() const;
 
 private:
 
@@ -82,10 +77,11 @@ private:
         std::vector<VkExtensionProperties> extensions;
     };
 
-    struct SwapChainImage
+    struct SwapChainBuffer
     {
-        WeakHandle<VkImage> image;     // Owned by the swap-chain
-        OwnedHandle<VkImageView> view; // Owned by the VulkanContex
+        WeakHandle<VkImage> image = VK_NULL_HANDLE; // Owned by the swap-chain
+        OwnedHandle<VkImageView> view = VK_NULL_HANDLE;
+        OwnedHandle<VkFramebuffer> framebuffer = VK_NULL_HANDLE;
     };
 
     struct DepthBuffer
@@ -93,8 +89,6 @@ private:
         OwnedHandle<VkImage> image = VK_NULL_HANDLE;
         OwnedHandle<VkImageView> view = VK_NULL_HANDLE;
         OwnedHandle<VkDeviceMemory> memory = VK_NULL_HANDLE;
-
-        void destroy();
     };
 
     // Instance creation helpers:
@@ -108,15 +102,16 @@ private:
     void initSwapChainExtensions();
     void initSwapChain();
 
-    // Framebuffer/depth-buffer initialization:
+    // Framebuffer/depth-buffer initialization/shutdown:
     void initDepthBuffer();
+    void destroyDepthBuffer();
     void initFramebuffers();
+    void destroyFramebuffers();
+    void initRenderPass();
 
     // Misc helpers:
-    static int memoryTypeFromProperties(std::uint32_t typeBits,
-                                        VkFlags requirementsMask);
-    static void setImageLayout(VkImage image, VkImageAspectFlags aspectMask,
-                               VkImageLayout oldImageLayout, VkImageLayout newImageLayout);
+    std::uint32_t memoryTypeFromProperties(std::uint32_t typeBits, VkFlags requirementsMask) const;
+    void setImageLayout(VkImage image, VkImageAspectFlags aspectMask, VkImageLayout oldImageLayout, VkImageLayout newImageLayout);
 
 private:
 
@@ -136,13 +131,19 @@ private:
     // Layers and extensions available for the VK Instance.
     std::vector<LayerProperties> m_instanceLayerProperties;
 
-    // Image swap-chain:
-    std::uint32_t m_swapChainImageCount;
+    // Image swap-chain (framebuffers):
+    Size2D m_framebufferSize;
+    std::uint32_t m_swapChainCount;
     OwnedHandle<VkSwapchainKHR> m_swapChain;
-    std::vector<SwapChainImage> m_swapChainBuffers;
+    std::vector<SwapChainBuffer> m_swapChainBuffers;
 
-    // Frame/depth buffers:
+    // Depth/stencil buffer images/views:
     DepthBuffer m_depthBuffer;
+
+    // Common render pass and main commands pool/buffer:
+    OwnedHandle<VkRenderPass> m_renderPass;
+    OwnedHandle<VkCommandPool> m_cmdPool;
+    OwnedHandle<VkCommandBuffer> m_cmdBuffer;
 
     // The rendering device we are going to use (always GPU 0 for now).
     OwnedHandle<VkDevice> m_device;
@@ -172,12 +173,12 @@ private:
 
 inline bool VulkanContext::isDebug()
 {
-    return validationMode == Debug;
+    return sm_validationMode == Debug;
 }
 
 inline bool VulkanContext::isRelease()
 {
-    return validationMode == Release;
+    return sm_validationMode == Release;
 }
 
 inline WeakHandle<VkDevice> VulkanContext::getDevice() const
@@ -208,6 +209,11 @@ inline WeakRef<const OSWindow> VulkanContext::getRenderWindow() const
 inline WeakRef<const VkAllocationCallbacks> VulkanContext::getAllocationCallbacks() const
 {
     return m_allocationCallbacks;
+}
+
+inline Size2D VulkanContext::getFramebufferSize() const
+{
+    return m_framebufferSize;
 }
 
 // ========================================================

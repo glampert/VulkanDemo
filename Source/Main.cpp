@@ -29,10 +29,10 @@ int main()
         Log::debugF("Resize[w=%i, h=%i]", newSize.width, newSize.height);
     };
 
-    VulkanContext::appName    = "VulkanDemo";
-    VulkanContext::appVersion = 1;
+    VulkanContext::sm_appName    = "VulkanDemo";
+    VulkanContext::sm_appVersion = 1;
 
-    VulkanContext vkCtx{ &window };
+    VulkanContext vkCtx{ &window, { 1024, 768 } };
     vkCtx.logInstanceLayerProperties();
 
     window.runEventLoop();

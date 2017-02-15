@@ -7,6 +7,12 @@
 // Brief: Main Vulkan context and device class.
 // ================================================================================================
 
+// To enable vkCreateWin32SurfaceKHR extensions (note: Windows-specific!)
+// Defined here before the include so vulkan.h exposes that just in this file.
+#if (!defined(VK_USE_PLATFORM_WIN32_KHR) && (defined(WIN32) || defined(WIN64)))
+    #define VK_USE_PLATFORM_WIN32_KHR 1
+#endif // !VK_USE_PLATFORM_WIN32_KHR && Windows
+
 #include "VulkanContext.hpp"
 #include "OSWindow.hpp"
 
@@ -24,29 +30,33 @@ namespace VkToolbox
 // VulkanContext statics:
 // ========================================================
 
-const char *  VulkanContext::appName          = "VulkanApp";
-std::uint32_t VulkanContext::appVersion       = 1;
-std::uint32_t VulkanContext::multiSampleCount = VK_SAMPLE_COUNT_1_BIT;
-VkFormat      VulkanContext::depthFormat      = VK_FORMAT_D16_UNORM;
+const char *  VulkanContext::sm_appName          = "VulkanApp";
+std::uint32_t VulkanContext::sm_appVersion       = 1;
+std::uint32_t VulkanContext::sm_multiSampleCount = VK_SAMPLE_COUNT_1_BIT;
+VkFormat      VulkanContext::sm_depthFormat      = VK_FORMAT_D24_UNORM_S8_UINT;
 
 #if DEBUG
-VulkanContext::ValidationMode VulkanContext::validationMode = VulkanContext::Debug;
+VulkanContext::ValidationMode VulkanContext::sm_validationMode = VulkanContext::Debug;
 #else // !DEBUG
-VulkanContext::ValidationMode VulkanContext::validationMode = VulkanContext::Release;
+VulkanContext::ValidationMode VulkanContext::sm_validationMode = VulkanContext::Release;
 #endif // DEBUG
 
 // ========================================================
 // class VulkanContext:
 // ========================================================
 
-VulkanContext::VulkanContext(WeakRef<const OSWindow> window, WeakRef<const VkAllocationCallbacks> allocCbs)
+VulkanContext::VulkanContext(WeakRef<const OSWindow> window, Size2D fbSize, WeakRef<const VkAllocationCallbacks> allocCbs)
     : m_instance{ VK_NULL_HANDLE }
     , m_renderWindow{ window }
     , m_allocationCallbacks{ allocCbs }
     , m_renderSurface{ VK_NULL_HANDLE }
     , m_renderSurfaceFormat{ VK_FORMAT_UNDEFINED }
-    , m_swapChainImageCount{ 0 }
+    , m_framebufferSize{ fbSize }
+    , m_swapChainCount{ 0 }
     , m_swapChain{ VK_NULL_HANDLE }
+    , m_renderPass{ VK_NULL_HANDLE }
+    , m_cmdPool{ VK_NULL_HANDLE }
+    , m_cmdBuffer{ VK_NULL_HANDLE }
     , m_device{ VK_NULL_HANDLE }
     , m_gpuQueueFamilyCount{ 0 }
     , m_gpuPresentQueueFamilyIndex{ -1 }
@@ -66,6 +76,7 @@ VulkanContext::VulkanContext(WeakRef<const OSWindow> window, WeakRef<const VkAll
     initDevice();
     initSwapChain();
     initDepthBuffer();
+    initRenderPass();
     initFramebuffers();
 
     Log::debugF("VulkanContext initialized successfully!");
@@ -75,16 +86,22 @@ VulkanContext::~VulkanContext()
 {
     Log::debugF("Destroying Vulkan API context...");
 
-    // The depth-buffer owns its image and view.
-    m_depthBuffer.destroy();
+    // The depth/frame-buffer owns its images and views.
+    destroyFramebuffers();
+    destroyDepthBuffer();
 
-    // Clean up the swap-chain image views.
-    // The swap-chain images themselves are owned by the swap-chain.
-    for (SwapChainImage & scImg : m_swapChainBuffers)
+    if (m_renderPass != VK_NULL_HANDLE)
     {
-        vkDestroyImageView(m_device, scImg.view, m_allocationCallbacks);
+        vkDestroyRenderPass(m_device, m_renderPass, m_allocationCallbacks);
     }
-
+    if (m_cmdBuffer != VK_NULL_HANDLE)
+    {
+        vkFreeCommandBuffers(m_device, m_cmdPool, 1, &m_cmdBuffer);
+    }
+    if (m_cmdPool != VK_NULL_HANDLE)
+    {
+        vkDestroyCommandPool(m_device, m_cmdPool, m_allocationCallbacks);
+    }
     if (m_swapChain != VK_NULL_HANDLE)
     {
         vkDestroySwapchainKHR(m_device, m_swapChain, m_allocationCallbacks);
@@ -169,15 +186,13 @@ void VulkanContext::initInstance()
     std::uint32_t instanceLayerCount;
     const char ** instanceLayerNames;
 
-    static const char * instanceLayerNamesDebug[] = {
+    const char * instanceLayerNamesDebug[] = {
         "VK_LAYER_LUNARG_standard_validation"
     };
-
-    static const char * instanceExtensionNames[] = {
-        VK_KHR_SURFACE_EXTENSION_NAME,
-        VK_KHR_WIN32_SURFACE_EXTENSION_NAME
+    const char * instanceExtensionNames[] = {
+        "VK_KHR_surface",
+        "VK_KHR_win32_surface"
     };
-
     const auto instanceExtensionCount = static_cast<std::uint32_t>(arrayLength(instanceExtensionNames));
 
     if (isDebug())
@@ -196,10 +211,10 @@ void VulkanContext::initInstance()
     VkApplicationInfo appInfo        = {};
     appInfo.sType                    = VK_STRUCTURE_TYPE_APPLICATION_INFO;
     appInfo.pNext                    = nullptr;
-    appInfo.pApplicationName         = appName;
-    appInfo.applicationVersion       = appVersion;
-    appInfo.pEngineName              = appName;
-    appInfo.engineVersion            = appVersion;
+    appInfo.pApplicationName         = sm_appName;
+    appInfo.applicationVersion       = sm_appVersion;
+    appInfo.pEngineName              = sm_appName;
+    appInfo.engineVersion            = sm_appVersion;
     appInfo.apiVersion               = VK_API_VERSION_1_0;
 
     VkInstanceCreateInfo instInfo    = {};
@@ -220,8 +235,8 @@ void VulkanContext::initInstance()
 
 void VulkanContext::initDevice()
 {
-    static const char * deviceExtensionNames[] = {
-        VK_KHR_SWAPCHAIN_EXTENSION_NAME
+    const char * deviceExtensionNames[] = {
+        "VK_KHR_swapchain" 
     };
     const auto deviceExtensionCount = static_cast<std::uint32_t>(arrayLength(deviceExtensionNames));
 
@@ -421,8 +436,8 @@ void VulkanContext::initSwapChain()
     {
         // If the surface size is undefined, size is set to the
         // the window size, but clamped to min/max extents supported.
-        swapChainExtent.width  = m_renderWindow->getSize().width;
-        swapChainExtent.height = m_renderWindow->getSize().height;
+        swapChainExtent.width  = m_framebufferSize.width;
+        swapChainExtent.height = m_framebufferSize.height;
 
         clamp(&swapChainExtent.width,  surfCapabilities.minImageExtent.width,  surfCapabilities.maxImageExtent.width);
         clamp(&swapChainExtent.height, surfCapabilities.minImageExtent.height, surfCapabilities.maxImageExtent.height);
@@ -458,7 +473,7 @@ void VulkanContext::initSwapChain()
         "VK_PRESENT_MODE_FIFO_KHR",
         "VK_PRESENT_MODE_FIFO_RELAXED_KHR"
     };
-    Log::debugF("KHRPresentMode=%s", presentModeNames[unsigned(swapChainPresentMode)]);
+    Log::debugF("KHRPresentMode=%s", presentModeNames[std::uint32_t(swapChainPresentMode)]);
 
     // Determine the number of VkImage's to use in the swap chain.
     // We need to acquire only 1 presentable image at a time.
@@ -519,15 +534,15 @@ void VulkanContext::initSwapChain()
     VKTB_CHECK(vkCreateSwapchainKHR(m_device, &swapChainCreateInfo, m_allocationCallbacks, &m_swapChain));
     assert(m_swapChain != VK_NULL_HANDLE);
 
-    VKTB_CHECK(vkGetSwapchainImagesKHR(m_device, m_swapChain, &m_swapChainImageCount, nullptr));
-    assert(m_swapChainImageCount >= 1);
+    VKTB_CHECK(vkGetSwapchainImagesKHR(m_device, m_swapChain, &m_swapChainCount, nullptr));
+    assert(m_swapChainCount >= 1);
 
-    std::vector<VkImage> swapChainImages(m_swapChainImageCount, VK_NULL_HANDLE);
-    VKTB_CHECK(vkGetSwapchainImagesKHR(m_device, m_swapChain, &m_swapChainImageCount, swapChainImages.data()));
-    assert(m_swapChainImageCount >= 1);
+    std::vector<VkImage> swapChainImages(m_swapChainCount, VK_NULL_HANDLE);
+    VKTB_CHECK(vkGetSwapchainImagesKHR(m_device, m_swapChain, &m_swapChainCount, swapChainImages.data()));
+    assert(m_swapChainCount >= 1);
 
-    m_swapChainBuffers.reserve(m_swapChainImageCount);
-    for (std::uint32_t i = 0; i < m_swapChainImageCount; ++i)
+    m_swapChainBuffers.reserve(m_swapChainCount);
+    for (std::uint32_t i = 0; i < m_swapChainCount; ++i)
     {
         VkImageViewCreateInfo imgViewCreateInfo           = {};
         imgViewCreateInfo.sType                           = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
@@ -546,13 +561,13 @@ void VulkanContext::initSwapChain()
         imgViewCreateInfo.flags                           = 0;
         imgViewCreateInfo.image                           = swapChainImages[i];
 
-        SwapChainImage scImg = {};
-        scImg.image = swapChainImages[i];
-        VKTB_CHECK(vkCreateImageView(m_device, &imgViewCreateInfo, m_allocationCallbacks, &scImg.view));
-        m_swapChainBuffers.push_back(scImg);
+        SwapChainBuffer scBuffer = {};
+        scBuffer.image = swapChainImages[i];
+        VKTB_CHECK(vkCreateImageView(m_device, &imgViewCreateInfo, m_allocationCallbacks, &scBuffer.view));
+        m_swapChainBuffers.push_back(scBuffer);
     }
 
-    Log::debugF("Swap-chain created with %u image buffers.", m_swapChainImageCount);
+    Log::debugF("Swap-chain created with %u image buffers.", m_swapChainCount);
 }
 
 void VulkanContext::initDepthBuffer()
@@ -560,7 +575,7 @@ void VulkanContext::initDepthBuffer()
     VkImageCreateInfo imageCreateInfo = {};
 
     VkFormatProperties props = {};
-    vkGetPhysicalDeviceFormatProperties(m_gpus[0], depthFormat, &props);
+    vkGetPhysicalDeviceFormatProperties(m_gpus[0], sm_depthFormat, &props);
 
     if (props.linearTilingFeatures & VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT)
     {
@@ -573,19 +588,21 @@ void VulkanContext::initDepthBuffer()
     else
     {
         // Try other depth formats?
-        Log::fatalF("Depth format %s not supported!", vkFormatToString(depthFormat));
+        Log::fatalF("Depth format %s not supported!", vkFormatToString(sm_depthFormat));
     }
+
+    Log::debugF("DepthBufferFormat=%s", vkFormatToString(sm_depthFormat));
 
     imageCreateInfo.sType                    = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
     imageCreateInfo.pNext                    = nullptr;
     imageCreateInfo.imageType                = VK_IMAGE_TYPE_2D;
-    imageCreateInfo.format                   = depthFormat;
-    imageCreateInfo.extent.width             = m_renderWindow->getSize().width;
-    imageCreateInfo.extent.height            = m_renderWindow->getSize().height;
+    imageCreateInfo.format                   = sm_depthFormat;
+    imageCreateInfo.extent.width             = m_framebufferSize.width;
+    imageCreateInfo.extent.height            = m_framebufferSize.height;
     imageCreateInfo.extent.depth             = 1;
     imageCreateInfo.mipLevels                = 1;
     imageCreateInfo.arrayLayers              = 1;
-    imageCreateInfo.samples                  = static_cast<VkSampleCountFlagBits>(multiSampleCount);
+    imageCreateInfo.samples                  = static_cast<VkSampleCountFlagBits>(sm_multiSampleCount);
     imageCreateInfo.initialLayout            = VK_IMAGE_LAYOUT_UNDEFINED;
     imageCreateInfo.queueFamilyIndexCount    = 0;
     imageCreateInfo.pQueueFamilyIndices      = nullptr;
@@ -601,7 +618,7 @@ void VulkanContext::initDepthBuffer()
     viewInfo.sType                           = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
     viewInfo.pNext                           = nullptr;
     viewInfo.image                           = VK_NULL_HANDLE;
-    viewInfo.format                          = depthFormat;
+    viewInfo.format                          = sm_depthFormat;
     viewInfo.components.r                    = VK_COMPONENT_SWIZZLE_R;
     viewInfo.components.g                    = VK_COMPONENT_SWIZZLE_G;
     viewInfo.components.b                    = VK_COMPONENT_SWIZZLE_B;
@@ -614,9 +631,9 @@ void VulkanContext::initDepthBuffer()
     viewInfo.viewType                        = VK_IMAGE_VIEW_TYPE_2D;
     viewInfo.flags                           = 0;
 
-    if (depthFormat == VK_FORMAT_D16_UNORM_S8_UINT ||
-        depthFormat == VK_FORMAT_D24_UNORM_S8_UINT ||
-        depthFormat == VK_FORMAT_D32_SFLOAT_S8_UINT)
+    if (sm_depthFormat == VK_FORMAT_D16_UNORM_S8_UINT ||
+        sm_depthFormat == VK_FORMAT_D24_UNORM_S8_UINT ||
+        sm_depthFormat == VK_FORMAT_D32_SFLOAT_S8_UINT)
     {
         viewInfo.subresourceRange.aspectMask |= VK_IMAGE_ASPECT_STENCIL_BIT;
     }
@@ -629,6 +646,7 @@ void VulkanContext::initDepthBuffer()
 
     // Use the memory properties to determine the type of memory required:
     memAllocInfo.memoryTypeIndex = memoryTypeFromProperties(memReqs.memoryTypeBits, /* requirementsMask = */ 0);
+    assert(memAllocInfo.memoryTypeIndex < UINT32_MAX);
 
     // Allocate the memory:
     VKTB_CHECK(vkAllocateMemory(m_device, &memAllocInfo, m_allocationCallbacks, &m_depthBuffer.memory));
@@ -645,22 +663,157 @@ void VulkanContext::initDepthBuffer()
     viewInfo.image = m_depthBuffer.image;
     VKTB_CHECK(vkCreateImageView(m_device, &viewInfo, m_allocationCallbacks, &m_depthBuffer.view));
     assert(m_depthBuffer.view != VK_NULL_HANDLE);
+
+    Log::debugF("Depth buffer initialized.");
 }
 
-void VulkanContext::DepthBuffer::destroy()
+void VulkanContext::destroyDepthBuffer()
 {
-    //TODO
+    if (m_depthBuffer.view != VK_NULL_HANDLE)
+    {
+        vkDestroyImageView(m_device, m_depthBuffer.view, m_allocationCallbacks);
+        m_depthBuffer.view = VK_NULL_HANDLE;
+    }
+    if (m_depthBuffer.image != VK_NULL_HANDLE)
+    {
+        vkDestroyImage(m_device, m_depthBuffer.image, m_allocationCallbacks);
+        m_depthBuffer.image = VK_NULL_HANDLE;
+    }
+    if (m_depthBuffer.memory != VK_NULL_HANDLE)
+    {
+        vkFreeMemory(m_device, m_depthBuffer.memory, m_allocationCallbacks);
+        m_depthBuffer.memory = VK_NULL_HANDLE;
+    }
 }
 
 void VulkanContext::initFramebuffers()
 {
-    //TODO
+    assert(m_depthBuffer.view != VK_NULL_HANDLE); // Depth buffer created first,
+    assert(m_renderPass       != VK_NULL_HANDLE); // and render pass also needed
+
+    VkImageView attachments[2];
+    attachments[1] = m_depthBuffer.view;
+
+    VkFramebufferCreateInfo fbCreateInfo = {};
+    fbCreateInfo.sType                   = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+    fbCreateInfo.pNext                   = nullptr;
+    fbCreateInfo.renderPass              = m_renderPass;
+    fbCreateInfo.attachmentCount         = static_cast<std::uint32_t>(arrayLength(attachments)); // Include the depth buffer
+    fbCreateInfo.pAttachments            = attachments;
+    fbCreateInfo.width                   = m_framebufferSize.width;
+    fbCreateInfo.height                  = m_framebufferSize.height;
+    fbCreateInfo.layers                  = 1;
+
+    for (std::uint32_t i = 0; i < m_swapChainCount; ++i)
+    {
+        attachments[0] = m_swapChainBuffers[i].view;
+        VKTB_CHECK(vkCreateFramebuffer(m_device, &fbCreateInfo, m_allocationCallbacks, &m_swapChainBuffers[i].framebuffer));
+        assert(m_swapChainBuffers[i].framebuffer != VK_NULL_HANDLE);
+    }
+
+    Log::debugF("Framebuffer initialized.");
 }
 
-int VulkanContext::memoryTypeFromProperties(const std::uint32_t typeBits, const VkFlags requirementsMask)
+void VulkanContext::destroyFramebuffers()
 {
-    //TODO
-    return 0;
+    // Clean up the swap-chain image views and FBs.
+    // The swap-chain images themselves are owned by the swap-chain.
+    for (SwapChainBuffer & scBuffer : m_swapChainBuffers)
+    {
+        if (scBuffer.view != VK_NULL_HANDLE)
+        {
+            vkDestroyImageView(m_device, scBuffer.view, m_allocationCallbacks);
+        }
+        if (scBuffer.framebuffer != VK_NULL_HANDLE)
+        {
+            vkDestroyFramebuffer(m_device, scBuffer.framebuffer, m_allocationCallbacks);
+        }
+    }
+    m_swapChainBuffers.clear();
+}
+
+void VulkanContext::initRenderPass()
+{
+    // Need attachments for render target (fb) and depth buffer
+    VkAttachmentDescription attachments[2];
+
+    VkAttachmentReference colorReference = {};
+    colorReference.attachment            = 0;
+    colorReference.layout                = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+    VkAttachmentReference depthReference = {};
+    depthReference.attachment            = 1;
+    depthReference.layout                = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+
+    // fb
+    attachments[0].format                = m_renderSurfaceFormat;
+    attachments[0].samples               = VkSampleCountFlagBits(sm_multiSampleCount);
+    attachments[0].loadOp                = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    attachments[0].storeOp               = VK_ATTACHMENT_STORE_OP_STORE;
+    attachments[0].stencilLoadOp         = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    attachments[0].stencilStoreOp        = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    attachments[0].initialLayout         = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    attachments[0].finalLayout           = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+    attachments[0].flags                 = 0;
+
+    // depth
+    attachments[1].format                = sm_depthFormat;
+    attachments[1].samples               = VkSampleCountFlagBits(sm_multiSampleCount);
+    attachments[1].loadOp                = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    attachments[1].storeOp               = VK_ATTACHMENT_STORE_OP_STORE;
+    attachments[1].stencilLoadOp         = VK_ATTACHMENT_LOAD_OP_LOAD;
+    attachments[1].stencilStoreOp        = VK_ATTACHMENT_STORE_OP_STORE;
+    attachments[1].initialLayout         = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+    attachments[1].finalLayout           = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+    attachments[1].flags                 = 0;
+
+    VkSubpassDescription subpass         = {};
+    subpass.pipelineBindPoint            = VK_PIPELINE_BIND_POINT_GRAPHICS;
+    subpass.flags                        = 0;
+    subpass.inputAttachmentCount         = 0;
+    subpass.pInputAttachments            = nullptr;
+    subpass.colorAttachmentCount         = 1;
+    subpass.pColorAttachments            = &colorReference;
+    subpass.pResolveAttachments          = nullptr;
+    subpass.pDepthStencilAttachment      = &depthReference;
+    subpass.preserveAttachmentCount      = 0;
+    subpass.pPreserveAttachments         = nullptr;
+
+    VkRenderPassCreateInfo rpCreateInfo  = {};
+    rpCreateInfo.sType                   = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+    rpCreateInfo.pNext                   = nullptr;
+    rpCreateInfo.attachmentCount         = static_cast<std::uint32_t>(arrayLength(attachments));
+    rpCreateInfo.pAttachments            = attachments;
+    rpCreateInfo.subpassCount            = 1;
+    rpCreateInfo.pSubpasses              = &subpass;
+    rpCreateInfo.dependencyCount         = 0;
+    rpCreateInfo.pDependencies           = nullptr;
+
+    VKTB_CHECK(vkCreateRenderPass(m_device, &rpCreateInfo, m_allocationCallbacks, &m_renderPass));
+    assert(m_renderPass != VK_NULL_HANDLE);
+
+    Log::debugF("Default render-pass initialized.");
+}
+
+std::uint32_t VulkanContext::memoryTypeFromProperties(std::uint32_t typeBits, VkFlags requirementsMask) const
+{
+    // Search mem types to find first index with those properties
+    for (std::uint32_t i = 0; i < m_gpuMemoryProperties.memoryTypeCount; ++i)
+    {
+        if ((typeBits & 1) == 1)
+        {
+            // Type is available, does it match user properties?
+            if ((m_gpuMemoryProperties.memoryTypes[i].propertyFlags & requirementsMask) == requirementsMask)
+            {
+                return i;
+            }
+        }
+        typeBits >>= 1;
+    }
+
+    // No memory types matched, return failure
+    Log::errorF("Unable to find index for requested memory type %#x, with mask %#x", typeBits, requirementsMask);
+    return UINT32_MAX;
 }
 
 void VulkanContext::setImageLayout(VkImage image, VkImageAspectFlags aspectMask,
@@ -692,6 +845,12 @@ void VulkanContext::logInstanceLayerProperties() const
     }
 
     Log::debugF("------------------------------------------");
+}
+
+Size2D VulkanContext::getRenderWindowSize() const
+{
+    assert(m_renderWindow != nullptr);
+    return m_renderWindow->getSize();
 }
 
 // ========================================================
