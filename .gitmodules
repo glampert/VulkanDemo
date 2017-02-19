@@ -13,3 +13,6 @@
 [submodule "Source/External/array_view"]
 	path = Source/External/array_view
 	url = git@github.com:glampert/array_view.git
+[submodule "Source/External/glslang"]
+	path = Source/External/glslang
+	url = https://github.com/KhronosGroup/glslang.git
