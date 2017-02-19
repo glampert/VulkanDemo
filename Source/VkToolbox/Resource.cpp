@@ -27,10 +27,11 @@ ResourceId ResourceId::getNull()
 // class Resource:
 // ========================================================
 
-Resource::Resource(WeakHandle<VkDevice> device, ResourceId id)
-    : m_device{ device }
+Resource::Resource(WeakRef<const VulkanContext> vkContext, ResourceId id)
+    : m_vkContext{ vkContext }
     , m_resId{ id }
 {
+    assert(m_vkContext != nullptr);
 }
 
 Resource::~Resource()
@@ -40,8 +41,8 @@ Resource::~Resource()
 
 void Resource::clear()
 {
-    m_device = VK_NULL_HANDLE;
-    m_resId  = ResourceId::getNull();
+    m_vkContext = nullptr;
+    m_resId = ResourceId::getNull();
 }
 
 } // namespace VkToolbox

@@ -32,7 +32,7 @@ public:
     ResourceManager & operator = (const ResourceManager &) = delete;
 
     // Init with the VK device that will own all the resources.
-    explicit ResourceManager(WeakHandle<VkDevice> device);
+    explicit ResourceManager(WeakRef<const VulkanContext> vkContext);
 
     // Preallocate storage for a number of resources. The parameter is merely a hint.
     void preallocate(int resourceCount);
@@ -49,14 +49,14 @@ public:
     // Check if resource slot already registered (may or may not be loaded).
     bool isRegistered(ResourceId inResId) const;
 
-    // Check if resource already loaded.
+    // Check if resource already loaded (slot must be registered).
     bool isLoaded(ResourceIndex resIndex) const;
 
-    // Reload given resource at slot.
+    // Reload given resource at slot (slot must be registered).
     bool reload(ResourceIndex resIndex);
 
-    // Unload given resource at slot.
-    bool unload(ResourceIndex resIndex);
+    // Unload given resource at slot (slot must be registered).
+    void unload(ResourceIndex resIndex);
 
     // Attempt to reload all registered resources.
     void reloadAll(int * outNumReloaded = nullptr, int * outNumFailed = nullptr);
@@ -75,39 +75,51 @@ public:
     //       since the underlaying store might be moved or reallocated!
     const T & getResourceRef(ResourceIndex resIndex) const;
 
+    // Access to the Vulkan instance that owns all the graphics resources.
+    const VulkanContext & getVkContext() const;
+
 private:
 
     // Expand the resource store by one item and also register the new index into the LUT.
     ResourceIndex createNewSlot(ResourceId id);
 
+    // Internal variant of getResourceRef() for load/unload mutable calls.
+    T & getResourceRefMutable(ResourceIndex resIndex);
+
+private:
+
     using HashIndex = hash_index<ResourceIndex, std::uint64_t>;
 
-    WeakHandle<VkDevice> m_device;
-    std::vector<T>       m_resourcesStore;
-    HashIndex            m_resourcesLookupTable;
+    WeakRef<const VulkanContext> m_vkContext;
+    std::vector<T> m_resourcesStore;
+    HashIndex m_resourcesLookupTable;
 };
 
 // ========================================================
-// Standard Resource Managers:
+// Standard Resource Manager types:
 // ========================================================
 
+extern template class ResourceManager<GlslShader>;
 using GlslShaderManager = ResourceManager<GlslShader>;
-using TextureManager    = ResourceManager<Texture>;
+
+extern template class ResourceManager<Texture>;
+using TextureManager = ResourceManager<Texture>;
 
 // ========================================================
 // ResourceManager inline methods:
 // ========================================================
 
 template<typename T>
-ResourceManager<T>::ResourceManager(WeakHandle<VkDevice> device)
-    : m_device{ device }
+ResourceManager<T>::ResourceManager(WeakRef<const VulkanContext> vkContext)
+    : m_vkContext{ vkContext }
 {
+    assert(m_vkContext != nullptr);
 }
 
 template<typename T>
 typename ResourceManager<T>::ResourceIndex ResourceManager<T>::createNewSlot(const ResourceId id)
 {
-    m_resourcesStore.emplace_back(m_device, id);
+    m_resourcesStore.emplace_back(m_vkContext, id);
     const auto index = narrowCast<ResourceIndex>(m_resourcesStore.size() - 1);
     m_resourcesLookupTable.insert(id.hash.value, index);
     return index;
@@ -212,13 +224,13 @@ bool ResourceManager<T>::isLoaded(const ResourceIndex resIndex) const
 template<typename T>
 bool ResourceManager<T>::reload(const ResourceIndex resIndex)
 {
-    return getResourceRef(resIndex).load();
+    return getResourceRefMutable(resIndex).load();
 }
 
 template<typename T>
-bool ResourceManager<T>::unload(const ResourceIndex resIndex)
+void ResourceManager<T>::unload(const ResourceIndex resIndex)
 {
-    return getResourceRef(resIndex).unload();
+    getResourceRefMutable(resIndex).unload();
 }
 
 template<typename T>
@@ -271,6 +283,19 @@ const T & ResourceManager<T>::getResourceRef(const ResourceIndex resIndex) const
 {
     assert(resIndex < m_resourcesStore.size());
     return m_resourcesStore[resIndex];
+}
+
+template<typename T>
+T & ResourceManager<T>::getResourceRefMutable(ResourceIndex resIndex)
+{
+    assert(resIndex < m_resourcesStore.size());
+    return m_resourcesStore[resIndex];
+}
+
+template<typename T>
+const VulkanContext & ResourceManager<T>::getVkContext() const
+{
+    return *m_vkContext;
 }
 
 } // namespace VkToolbox

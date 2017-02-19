@@ -108,6 +108,7 @@ private:
     void initFramebuffers();
     void destroyFramebuffers();
     void initRenderPass();
+    void initCommandPoolAndBuffer();
 
     // Misc helpers:
     std::uint32_t memoryTypeFromProperties(std::uint32_t typeBits, VkFlags requirementsMask) const;
@@ -118,7 +119,7 @@ private:
     // API global context.
     OwnedHandle<VkInstance> m_instance;
 
-    // Ref to the OS Window we are rendeing to.
+    // Ref to the OS Window we are rendering to (non-null).
     WeakRef<const OSWindow> m_renderWindow;
 
     // User provided allocations callbacks or nullptr.
@@ -144,16 +145,18 @@ private:
     OwnedHandle<VkRenderPass> m_renderPass;
     OwnedHandle<VkCommandPool> m_cmdPool;
     OwnedHandle<VkCommandBuffer> m_cmdBuffer;
+    bool m_cmdBufferRecordingState; // Between vkBeginCommandBuffer and vkEndCommandBuffer
+    bool m_cmdBufferExecuteState;   // After vkEndCommandBuffer
 
     // The rendering device we are going to use (always GPU 0 for now).
     OwnedHandle<VkDevice> m_device;
 
-    // Handles to the "Physical Devices", AKA the GPUs. These handles are owned by the VK instance.
+    // Handle to the "Physical Device", AKA the GPU. This handle is owned by the VK instance.
     // Vulkan allows explicitly selecting the device you want to use, on systems with more than one
-    // GPU (e.g. SLI, Crossfire, etc). We will be sticking to a single GPU in this demo for simplicity.
-    std::vector<WeakHandle<VkPhysicalDevice>> m_gpus;
+    // GPU (e.g. SLI, Crossfire, etc). I will be sticking to a single GPU in this demo for simplicity.
+    WeakHandle<VkPhysicalDevice> m_gpuPhysDevice;
 
-    // Information about the rendering, compute and present queues available in the GPU.
+    // Information about the rendering, compute and present queues available in the first GPU.
     std::vector<VkQueueFamilyProperties> m_gpuQueueProperties;
     std::uint32_t m_gpuQueueFamilyCount;
     std::int32_t  m_gpuPresentQueueFamilyIndex;
@@ -221,16 +224,24 @@ inline Size2D VulkanContext::getFramebufferSize() const
 // ========================================================
 
 // Checks a VkResult returned from the expression and logs a fatal error if it is not VK_SUCCESS.
-#define VKTB_CHECK(expr) \
-    do { \
-        const VkResult errorCode = expr; \
-        if (errorCode != VK_SUCCESS) \
-        { \
-            VkToolbox::Log::fatalF("Vulkan error %s in: %s - %s(%i)", \
+#define VKTB_CHECK(expr)                                                   \
+    do {                                                                   \
+        const VkResult errorCode = expr;                                   \
+        if (errorCode != VK_SUCCESS)                                       \
+        {                                                                  \
+            VkToolbox::Log::fatalF("Vulkan error %s in: %s - %s(%i)",      \
                                    VkToolbox::vkResultToString(errorCode), \
-                                   #expr, __FILE__, __LINE__); \
-        } \
+                                   #expr, __FILE__, __LINE__);             \
+        }                                                                  \
     } while (0,0)
+
+// Log a presumably non-fatal Vulkan error code with source location info added to it.
+#define VKTB_LOG_ERROR(errorCode, message)                         \
+    VkToolbox::Log::errorF("Vulkan error %s in: %s(%i): %s",       \
+                           VkToolbox::vkResultToString(errorCode), \
+                           __FILE__, __LINE__, message)
+
+// ========================================================
 
 // Printable null-terminated C-string from the VkResult error code.
 // Note: The returned string is statically allocated and must not be freed.
@@ -239,5 +250,7 @@ const char * vkResultToString(const VkResult res);
 // Printable null-terminated C-string for the VK image/buffer format.
 // Note: The returned string is statically allocated and must not be freed.
 const char * vkFormatToString(const VkFormat fmt);
+
+// ========================================================
 
 } // namespace VkToolbox

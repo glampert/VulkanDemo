@@ -9,7 +9,9 @@
 // ================================================================================================
 
 #include <cassert>
+#include <cstring>
 #include <utility>
+#include <memory>
 #include <type_traits>
 
 namespace VkToolbox
@@ -57,6 +59,8 @@ inline void clamp(T * inOutVal, const T minVal, const T maxVal)
     else if ((*inOutVal) > maxVal) { (*inOutVal) = maxVal; }
 }
 
+// ========================================================
+
 // Width and height pair.
 struct Size2D final
 {
@@ -85,6 +89,19 @@ using WeakHandle = H;
 // Alias to signify that the VK handle is strong (e.g. owning) and should be deleted by the holder.
 template<typename H>
 using OwnedHandle = H;
+
+// ========================================================
+
+// Test of a C string is a prefix of another. Strings must not be null!
+inline bool strStartsWith(const char * const str, const char * const prefix)
+{
+    assert(str != nullptr && prefix != nullptr);
+    return std::strncmp(str, prefix, std::strlen(prefix)) == 0;
+}
+
+// Open and load a file into memory, appending a null byte at the end to make it a valid C-style string.
+// outFileSize is mandatory and must not be null.
+std::unique_ptr<char[]> loadTextFile(const char * const inFilename, std::size_t * outFileSize);
 
 // ========================================================
 

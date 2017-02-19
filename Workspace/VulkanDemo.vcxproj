@@ -181,7 +181,9 @@
     <ClCompile Include="..\Source\VkToolbox\Log.cpp" />
     <ClCompile Include="..\Source\VkToolbox\OSWindow.cpp" />
     <ClCompile Include="..\Source\VkToolbox\Resource.cpp" />
+    <ClCompile Include="..\Source\VkToolbox\ResourceManager.cpp" />
     <ClCompile Include="..\Source\VkToolbox\Texture.cpp" />
+    <ClCompile Include="..\Source\VkToolbox\Utils.cpp" />
     <ClCompile Include="..\Source\VkToolbox\VulkanContext.cpp" />
   </ItemGroup>
   <ItemGroup>

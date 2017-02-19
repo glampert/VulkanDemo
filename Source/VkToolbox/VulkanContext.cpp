@@ -57,7 +57,10 @@ VulkanContext::VulkanContext(WeakRef<const OSWindow> window, Size2D fbSize, Weak
     , m_renderPass{ VK_NULL_HANDLE }
     , m_cmdPool{ VK_NULL_HANDLE }
     , m_cmdBuffer{ VK_NULL_HANDLE }
+    , m_cmdBufferRecordingState{ false }
+    , m_cmdBufferExecuteState{ false }
     , m_device{ VK_NULL_HANDLE }
+    , m_gpuPhysDevice{ VK_NULL_HANDLE }
     , m_gpuQueueFamilyCount{ 0 }
     , m_gpuPresentQueueFamilyIndex{ -1 }
     , m_gpuGraphicsQueueFamilyIndex{ -1 }
@@ -75,6 +78,7 @@ VulkanContext::VulkanContext(WeakRef<const OSWindow> window, Size2D fbSize, Weak
     initSwapChainExtensions();
     initDevice();
     initSwapChain();
+    initCommandPoolAndBuffer();
     initDepthBuffer();
     initRenderPass();
     initFramebuffers();
@@ -184,12 +188,12 @@ void VulkanContext::initInstanceExtensionProperties(LayerProperties & layerProps
 void VulkanContext::initInstance()
 {
     std::uint32_t instanceLayerCount;
-    const char ** instanceLayerNames;
+    const char * const * instanceLayerNames;
 
-    const char * instanceLayerNamesDebug[] = {
+    const char * const instanceLayerNamesDebug[] = {
         "VK_LAYER_LUNARG_standard_validation"
     };
-    const char * instanceExtensionNames[] = {
+    const char * const instanceExtensionNames[] = {
         "VK_KHR_surface",
         "VK_KHR_win32_surface"
     };
@@ -235,8 +239,8 @@ void VulkanContext::initInstance()
 
 void VulkanContext::initDevice()
 {
-    const char * deviceExtensionNames[] = {
-        "VK_KHR_swapchain" 
+    const char * const deviceExtensionNames[] = {
+        "VK_KHR_swapchain"
     };
     const auto deviceExtensionCount = static_cast<std::uint32_t>(arrayLength(deviceExtensionNames));
 
@@ -258,7 +262,7 @@ void VulkanContext::initDevice()
     deviceCreateInfo.ppEnabledExtensionNames   = deviceExtensionNames;
     deviceCreateInfo.pEnabledFeatures          = nullptr;
 
-    VKTB_CHECK(vkCreateDevice(m_gpus[0], &deviceCreateInfo, m_allocationCallbacks, &m_device));
+    VKTB_CHECK(vkCreateDevice(m_gpuPhysDevice, &deviceCreateInfo, m_allocationCallbacks, &m_device));
     assert(m_device != VK_NULL_HANDLE);
 
     Log::debugF("VK Device created for GPU 0!");
@@ -270,6 +274,7 @@ void VulkanContext::initDevice()
     if (m_gpuGraphicsQueueFamilyIndex == m_gpuPresentQueueFamilyIndex)
     {
         m_gpuPresentQueue = m_gpuGraphicsQueue;
+        Log::debugF("Graphics and present queues are the same.");
     }
     else
     {
@@ -282,35 +287,37 @@ void VulkanContext::initEnumerateGpus()
 {
     std::uint32_t gpuCount = 0;
     std::uint32_t queueFamilyCount = 0;
+    std::vector<VkPhysicalDevice> gpus;
 
     VKTB_CHECK(vkEnumeratePhysicalDevices(m_instance, &gpuCount, nullptr));
     assert(gpuCount >= 1);
 
-    m_gpus.resize(gpuCount);
+    gpus.resize(gpuCount);
 
-    VKTB_CHECK(vkEnumeratePhysicalDevices(m_instance, &gpuCount, m_gpus.data()));
+    VKTB_CHECK(vkEnumeratePhysicalDevices(m_instance, &gpuCount, gpus.data()));
     assert(gpuCount >= 1);
 
     // For now we only care about GPU 0 - no support for multi-GPU systems.
 
-    vkGetPhysicalDeviceQueueFamilyProperties(m_gpus[0], &queueFamilyCount, nullptr);
+    vkGetPhysicalDeviceQueueFamilyProperties(gpus[0], &queueFamilyCount, nullptr);
     assert(queueFamilyCount >= 1);
 
     m_gpuQueueProperties.resize(queueFamilyCount);
 
-    vkGetPhysicalDeviceQueueFamilyProperties(m_gpus[0], &queueFamilyCount, m_gpuQueueProperties.data());
+    vkGetPhysicalDeviceQueueFamilyProperties(gpus[0], &queueFamilyCount, m_gpuQueueProperties.data());
     assert(queueFamilyCount >= 1);
 
     // This is as good a place as any to do this:
-    vkGetPhysicalDeviceFeatures(m_gpus[0], &m_gpuFeatures);
-    vkGetPhysicalDeviceProperties(m_gpus[0], &m_gpuProperties);
-    vkGetPhysicalDeviceMemoryProperties(m_gpus[0], &m_gpuMemoryProperties);
+    vkGetPhysicalDeviceFeatures(gpus[0], &m_gpuFeatures);
+    vkGetPhysicalDeviceProperties(gpus[0], &m_gpuProperties);
+    vkGetPhysicalDeviceMemoryProperties(gpus[0], &m_gpuMemoryProperties);
 
     // Minimal debug printing:
     Log::debugF("Found %i physical GPUs", gpuCount);
     Log::debugF("GPU 0 has %i queues", queueFamilyCount);
     Log::debugF("GPU 0 name: %s", m_gpuProperties.deviceName);
 
+    m_gpuPhysDevice = gpus[0];
     m_gpuQueueFamilyCount = queueFamilyCount;
 }
 
@@ -334,7 +341,7 @@ void VulkanContext::initSwapChainExtensions()
     std::vector<VkBool32> queuesSupportingPresent(m_gpuQueueFamilyCount, VK_FALSE);
     for (std::uint32_t q = 0; q < m_gpuQueueFamilyCount; ++q)
     {
-        VKTB_CHECK(vkGetPhysicalDeviceSurfaceSupportKHR(m_gpus[0], q, 
+        VKTB_CHECK(vkGetPhysicalDeviceSurfaceSupportKHR(m_gpuPhysDevice, q, 
                         m_renderSurface, &queuesSupportingPresent[q]));
     }
 
@@ -380,11 +387,11 @@ void VulkanContext::initSwapChainExtensions()
 
     // Get the list of VkFormats that are supported:
     std::uint32_t formatCount = 0;
-    VKTB_CHECK(vkGetPhysicalDeviceSurfaceFormatsKHR(m_gpus[0], m_renderSurface, &formatCount, nullptr));
+    VKTB_CHECK(vkGetPhysicalDeviceSurfaceFormatsKHR(m_gpuPhysDevice, m_renderSurface, &formatCount, nullptr));
     assert(formatCount >= 1);
 
     std::vector<VkSurfaceFormatKHR> surfFormats(formatCount);
-    VKTB_CHECK(vkGetPhysicalDeviceSurfaceFormatsKHR(m_gpus[0], m_renderSurface, &formatCount, surfFormats.data()));
+    VKTB_CHECK(vkGetPhysicalDeviceSurfaceFormatsKHR(m_gpuPhysDevice, m_renderSurface, &formatCount, surfFormats.data()));
     assert(formatCount >= 1);
 
     if (isDebug())
@@ -419,14 +426,14 @@ void VulkanContext::initSwapChainExtensions()
 void VulkanContext::initSwapChain()
 {
     VkSurfaceCapabilitiesKHR surfCapabilities;
-    VKTB_CHECK(vkGetPhysicalDeviceSurfaceCapabilitiesKHR(m_gpus[0], m_renderSurface, &surfCapabilities));
+    VKTB_CHECK(vkGetPhysicalDeviceSurfaceCapabilitiesKHR(m_gpuPhysDevice, m_renderSurface, &surfCapabilities));
 
     std::uint32_t presentModeCount = 0; // Get the count:
-    VKTB_CHECK(vkGetPhysicalDeviceSurfacePresentModesKHR(m_gpus[0], m_renderSurface, &presentModeCount, nullptr));
+    VKTB_CHECK(vkGetPhysicalDeviceSurfacePresentModesKHR(m_gpuPhysDevice, m_renderSurface, &presentModeCount, nullptr));
     assert(presentModeCount >= 1);
 
     std::vector<VkPresentModeKHR> presentModes(presentModeCount, VkPresentModeKHR(0));
-    VKTB_CHECK(vkGetPhysicalDeviceSurfacePresentModesKHR(m_gpus[0], m_renderSurface, &presentModeCount, presentModes.data()));
+    VKTB_CHECK(vkGetPhysicalDeviceSurfacePresentModesKHR(m_gpuPhysDevice, m_renderSurface, &presentModeCount, presentModes.data()));
     assert(presentModeCount >= 1);
 
     VkExtent2D swapChainExtent;
@@ -575,7 +582,7 @@ void VulkanContext::initDepthBuffer()
     VkImageCreateInfo imageCreateInfo = {};
 
     VkFormatProperties props = {};
-    vkGetPhysicalDeviceFormatProperties(m_gpus[0], sm_depthFormat, &props);
+    vkGetPhysicalDeviceFormatProperties(m_gpuPhysDevice, sm_depthFormat, &props);
 
     if (props.linearTilingFeatures & VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT)
     {
@@ -795,6 +802,48 @@ void VulkanContext::initRenderPass()
     Log::debugF("Default render-pass initialized.");
 }
 
+void VulkanContext::initCommandPoolAndBuffer()
+{
+    // Command pool:
+    {
+        VkCommandPoolCreateInfo cpCreateInfo = {};
+        cpCreateInfo.sType                   = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+        cpCreateInfo.pNext                   = nullptr;
+        cpCreateInfo.queueFamilyIndex        = m_gpuGraphicsQueueFamilyIndex;
+        cpCreateInfo.flags                   = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
+
+        VKTB_CHECK(vkCreateCommandPool(m_device, &cpCreateInfo, m_allocationCallbacks, &m_cmdPool));
+        assert(m_cmdPool != VK_NULL_HANDLE);
+    }
+
+    // Default command buffer:
+    {
+        VkCommandBufferAllocateInfo cmdAllocInfo = {};
+        cmdAllocInfo.sType                       = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+        cmdAllocInfo.pNext                       = nullptr;
+        cmdAllocInfo.commandPool                 = m_cmdPool;
+        cmdAllocInfo.level                       = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+        cmdAllocInfo.commandBufferCount          = 1;
+
+        VKTB_CHECK(vkAllocateCommandBuffers(m_device, &cmdAllocInfo, &m_cmdBuffer));
+        assert(m_cmdBuffer != VK_NULL_HANDLE);
+
+        // Put the default buffer in a state ready to receive commands.
+        // Must call vkEndCommandBuffer on it later on to be able to submit.
+        VkCommandBufferBeginInfo cmdBufBeginInfo = {};
+        cmdBufBeginInfo.sType                    = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+        cmdBufBeginInfo.pNext                    = nullptr;
+        cmdBufBeginInfo.flags                    = 0;
+        cmdBufBeginInfo.pInheritanceInfo         = nullptr;
+
+        VKTB_CHECK(vkBeginCommandBuffer(m_cmdBuffer, &cmdBufBeginInfo));
+        m_cmdBufferRecordingState = true;
+        m_cmdBufferExecuteState   = false;
+    }
+
+    Log::debugF("Default command pool and buffer initialized for queue %i.", m_gpuGraphicsQueueFamilyIndex);
+}
+
 std::uint32_t VulkanContext::memoryTypeFromProperties(std::uint32_t typeBits, VkFlags requirementsMask) const
 {
     // Search mem types to find first index with those properties
@@ -819,7 +868,77 @@ std::uint32_t VulkanContext::memoryTypeFromProperties(std::uint32_t typeBits, Vk
 void VulkanContext::setImageLayout(VkImage image, VkImageAspectFlags aspectMask,
                                    VkImageLayout oldImageLayout, VkImageLayout newImageLayout)
 {
-    //TODO
+    assert(image != VK_NULL_HANDLE);
+    assert(m_cmdBuffer != VK_NULL_HANDLE);
+    assert(m_gpuGraphicsQueue != VK_NULL_HANDLE);
+
+    VkImageMemoryBarrier imageMemBarrier            = {};
+    imageMemBarrier.sType                           = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+    imageMemBarrier.pNext                           = nullptr;
+    imageMemBarrier.srcAccessMask                   = 0;
+    imageMemBarrier.dstAccessMask                   = 0;
+    imageMemBarrier.oldLayout                       = oldImageLayout;
+    imageMemBarrier.newLayout                       = newImageLayout;
+    imageMemBarrier.srcQueueFamilyIndex             = VK_QUEUE_FAMILY_IGNORED;
+    imageMemBarrier.dstQueueFamilyIndex             = VK_QUEUE_FAMILY_IGNORED;
+    imageMemBarrier.image                           = image;
+    imageMemBarrier.subresourceRange.aspectMask     = aspectMask;
+    imageMemBarrier.subresourceRange.baseMipLevel   = 0;
+    imageMemBarrier.subresourceRange.levelCount     = 1;
+    imageMemBarrier.subresourceRange.baseArrayLayer = 0;
+    imageMemBarrier.subresourceRange.layerCount     = 1;
+
+    if (oldImageLayout == VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL)
+    {
+        imageMemBarrier.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+    }
+
+    if (newImageLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL)
+    {
+        imageMemBarrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+    }
+
+    if (newImageLayout == VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL)
+    {
+        imageMemBarrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+    }
+
+    if (oldImageLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL)
+    {
+        imageMemBarrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+    }
+
+    if (oldImageLayout == VK_IMAGE_LAYOUT_PREINITIALIZED)
+    {
+        imageMemBarrier.srcAccessMask = VK_ACCESS_HOST_WRITE_BIT;
+    }
+
+    if (newImageLayout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
+    {
+        imageMemBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+    }
+
+    if (newImageLayout == VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL)
+    {
+        imageMemBarrier.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+    }
+
+    if (newImageLayout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL)
+    {
+        imageMemBarrier.dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+    }
+
+    vkCmdPipelineBarrier(
+        /* commandBuffer            = */ m_cmdBuffer,
+        /* srcStageMask             = */ VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+        /* dstStageMask             = */ VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+        /* dependencyFlags          = */ 0,
+        /* memoryBarrierCount       = */ 0,
+        /* pMemoryBarriers          = */ nullptr,
+        /* bufferMemoryBarrierCount = */ 0,
+        /* pBufferMemoryBarriers    = */ nullptr,
+        /* imageMemoryBarrierCount  = */ 1,
+        /* pImageBarriers           = */ &imageMemBarrier);
 }
 
 void VulkanContext::logInstanceLayerProperties() const

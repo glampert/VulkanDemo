@@ -14,14 +14,21 @@ Vk demo idea 2:
  - Explore some way of updating them in parallel (each thread animates and renders a single model)
 */
 
+#include <direct.h>
+
 #include "VkToolbox/Log.hpp"
 #include "VkToolbox/OSWindow.hpp"
 #include "VkToolbox/VulkanContext.hpp"
+#include "VkToolbox/ResourceManager.hpp"
 
 using namespace VkToolbox;
 
 int main()
 {
+    char cwd[512];
+    _getcwd(cwd, sizeof(cwd));
+    Log::debugF("CWD = %s", cwd);
+
     OSWindow window{ { 1024, 768, "VulkanDemo", false } };
 
     window.onResize = [](OSWindow &, const Size2D newSize)
@@ -31,9 +38,17 @@ int main()
 
     VulkanContext::sm_appName    = "VulkanDemo";
     VulkanContext::sm_appVersion = 1;
+//    VulkanContext::sm_validationMode = VulkanContext::Release;
 
     VulkanContext vkCtx{ &window, { 1024, 768 } };
     vkCtx.logInstanceLayerProperties();
+
+    // Test shader
+    {
+        str32 shdrName = "simple2.glsl";
+        GlslShader shdr{ &vkCtx, ResourceId{ &shdrName, Hash64{ shdrName.c_str() } } };
+        shdr.load();
+    }
 
     window.runEventLoop();
 }

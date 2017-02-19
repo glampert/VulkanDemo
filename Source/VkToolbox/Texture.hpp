@@ -18,7 +18,7 @@ class Texture final
 {
 public:
 
-    Texture(WeakHandle<VkDevice> device, ResourceId id);
+    Texture(WeakRef<const VulkanContext> vkContext, ResourceId id);
     ~Texture();
 
     // Movable.
@@ -30,7 +30,6 @@ public:
     void unload() override;
     void shutdown() override;
     bool isLoaded() const override;
-    bool isShutdown() const override;
 
 private:
     

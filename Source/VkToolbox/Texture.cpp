@@ -12,8 +12,8 @@
 namespace VkToolbox
 {
 
-Texture::Texture(WeakHandle<VkDevice> device, ResourceId id)
-    : Resource{ device, id }
+Texture::Texture(WeakRef<const VulkanContext> vkContext, ResourceId id)
+    : Resource{ vkContext, id }
 {
 }
 
@@ -23,17 +23,19 @@ Texture::~Texture()
 }
 
 Texture::Texture(Texture && other)
-    : Resource{ other.m_device, other.m_resId }
+    : Resource{ other.m_vkContext, other.m_resId }
 {
     other.clear();
 }
 
 Texture & Texture::operator = (Texture && other)
 {
-    m_device = other.m_device;
-    m_resId  = other.m_resId;
-    other.clear();
+    Texture::shutdown();
 
+    m_vkContext = other.m_vkContext;
+    m_resId     = other.m_resId;
+
+    other.clear();
     return *this;
 }
 
@@ -61,12 +63,6 @@ void Texture::clear()
 }
 
 bool Texture::isLoaded() const
-{
-    //TODO
-    return false;
-}
-
-bool Texture::isShutdown() const
 {
     //TODO
     return false;

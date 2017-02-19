@@ -46,6 +46,12 @@
     <ClCompile Include="..\Source\VkToolbox\VulkanContext.cpp">
       <Filter>Source Files\VkToolbox</Filter>
     </ClCompile>
+    <ClCompile Include="..\Source\VkToolbox\ResourceManager.cpp">
+      <Filter>Source Files\VkToolbox</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Source\VkToolbox\Utils.cpp">
+      <Filter>Source Files\VkToolbox</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\Source\VkToolbox\Resource.hpp">

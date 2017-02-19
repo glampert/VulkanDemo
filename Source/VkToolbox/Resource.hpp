@@ -21,13 +21,15 @@ namespace VkToolbox
 
 struct ResourceId final
 {
-    const str * name; // Reference to string pool.
+    const str * name; // Pointer to string pool.
     Hash64      hash; // Hash of name string.
 
     bool operator == (const ResourceId & other) const { return this->hash == other.hash; }
     bool operator != (const ResourceId & other) const { return this->hash != other.hash; }
 
-    bool isNull() const { return hash.value == 0; }
+    const char * getName() const { return name->c_str(); }
+    bool isNull() const { return hash.isNull(); }
+
     static ResourceId getNull();
 };
 
@@ -43,7 +45,7 @@ public:
     Resource(const Resource &) = delete;
     Resource & operator = (const Resource &) = delete;
 
-    Resource(WeakHandle<VkDevice> device, ResourceId id);
+    Resource(WeakRef<const VulkanContext> vkContext, ResourceId id);
     virtual ~Resource();
 
     // Load or reload the resource from file.
@@ -57,19 +59,40 @@ public:
 
     // Check if loaded/shutdown:
     virtual bool isLoaded() const = 0;
-    virtual bool isShutdown() const = 0;
+    virtual bool isShutdown() const;
 
     // Common accessors:
-    WeakHandle<VkDevice> getDevice() const { return m_device; }
-    ResourceId getId() const { return m_resId; }
+    const VulkanContext & getVkContext() const;
+    const ResourceId & getId() const;
 
 protected:
 
-    // Reset the device handle and id to null/invalid states.
+    // Resets the context and resource id to null.
     virtual void clear();
 
-    WeakHandle<VkDevice> m_device;
-    ResourceId           m_resId;
+    // Common resource data:
+    WeakRef<const VulkanContext> m_vkContext;
+    ResourceId m_resId;
 };
+
+// ========================================================
+
+inline bool Resource::isShutdown() const
+{
+    return m_vkContext == nullptr;
+}
+
+inline const VulkanContext & Resource::getVkContext() const
+{
+    assert(m_vkContext != nullptr);
+    return *m_vkContext;
+}
+
+inline const ResourceId & Resource::getId() const
+{
+    return m_resId;
+}
+
+// ========================================================
 
 } // namespace VkToolbox

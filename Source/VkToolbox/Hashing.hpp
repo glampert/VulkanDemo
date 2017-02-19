@@ -59,6 +59,7 @@ struct Hash32 final
         return buffer;
     }
 
+    bool isNull() const { return value == 0; }
     bool operator == (const Hash32 other) const { return this->value == other.value; }
     bool operator != (const Hash32 other) const { return this->value != other.value; }
 };
@@ -96,6 +97,7 @@ struct Hash64 final
         return buffer;
     }
 
+    bool isNull() const { return value == 0; }
     bool operator == (const Hash64 other) const { return this->value == other.value; }
     bool operator != (const Hash64 other) const { return this->value != other.value; }
 };
