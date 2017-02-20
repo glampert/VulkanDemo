@@ -65,14 +65,22 @@ int setDefine(const char * name, int value);
 int setDefine(const char * name, float value);
 int setDefine(const char * name, const char * value);
 
+// Set #version directive and #extension directives used by all shaders.
+void setExtension(const char * extName, const char * state);
+void setVersion(int version);
+int getVersion();
+
 // Find a global shader #define. Null when not found or bad index.
 const Define * findDefine(const char * name);
 const Define * getDefine(int index);
+
+const char * getAllDefinesString();
 int getDefinesCount();
+void shutdown();
 
 // Set/get the include path appended to all shader #includes. Initially empty.
 void setShaderIncludePath(const char * pathEndingWithSlash);
-const str & getShaderIncludePath();
+const char * getShaderIncludePath();
 
 } // namespace GlslShaderPreproc
 
@@ -85,6 +93,13 @@ class GlslShader final
 {
 public:
 
+    // Perform static initialization and shutdown for the shared state required
+    // by the GLSL to SPIR-V compiler. We must call the initialization at least
+    // once before creating an instance of a GlslShader.
+    static void initClass();
+    static void shutdownClass();
+
+    // Constructor/destructor:
     GlslShader(WeakRef<const VulkanContext> vkContext, ResourceId id);
     ~GlslShader();
 
@@ -98,10 +113,22 @@ public:
     void shutdown() override;
     bool isLoaded() const override;
 
-    // Shader stage / source code access:
+    // Reload using the current GLSL source code, rather than reloading from file.
+    bool reloadCurrent();
+
+    // Set the GLSL source code. This can be useful, for example, to create a shader
+    // instance from an embedded C string, then calling reloadCurrent() to create the stages.
+    // NOTE: GlslShader will take ownership of the pointer and delete it when the class instance is destroyed.
+    void setSourceCode(const char * glslSource);
+
+    // Read-only access to the GLSL source code
+    // (owned by the shader unless specified otherwise by setShaderSource).
     const char * getSourceCode() const;
+
+    // Shader stage access:
     int getStageCount() const;
     const GlslShaderStage & getStage(int index) const;
+    const GlslShaderStage * findStageById(GlslShaderStage::Id id) const;
 
     // Create the pipeline state structs for Vulkan shader setup. Assumes the default "main"
     // entry point for std GLSL stages. Size of the out array must be >= GlslShaderStage::MaxStages.
@@ -114,16 +141,17 @@ private:
     // Override from Resource.
     void clear() override;
 
-    // Creates a single VK shader module from the null-terminated GLSL source code string.
+    // Creates a single VK shader module from the null-terminated GLSL source code strings.
     static OwnedHandle<VkShaderModule> createShaderModule(const VulkanContext & vkContext,
-                                                          const char * sourceCode,
-                                                          std::size_t sourceLen);
+                                                          const VkShaderStageFlagBits shaderType,
+                                                          const char * shaderDebugName,
+                                                          const array_view<const char *> glslSourceStrings);
 
     // Create stages from an annotated GLSL source code string. This looks for the custom tags that
     // split the string for the different shader stages, then creates a VK shader module for each tag found.
     static bool createShaderStages(const VulkanContext & vkContext, const char * sourceCode,
                                    std::size_t sourceLen, GlslShaderStageArray * outStages,
-                                   int * outStageCount);
+                                   int * outStageCount, const char * shaderDebugName);
 
 private:
 
@@ -158,6 +186,18 @@ inline const GlslShaderStage & GlslShader::getStage(const int index) const
     assert(index >= 0);
     assert(index < m_stageCount);
     return m_stages[index];
+}
+
+inline const GlslShaderStage * GlslShader::findStageById(const GlslShaderStage::Id id) const
+{
+    for (int s = 0; s < m_stageCount; ++s)
+    {
+        if (m_stages[s].id == id)
+        {
+            return &m_stages[s];
+        }
+    }
+    return nullptr;
 }
 
 inline int GlslShader::getVkPipelineStages(std::array<VkPipelineShaderStageCreateInfo, GlslShaderStage::MaxStages> * outStages) const

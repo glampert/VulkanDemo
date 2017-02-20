@@ -105,5 +105,11 @@
     <ClInclude Include="..\Source\External\array_view\array_view.hpp">
       <Filter>Source Files\External\Libs</Filter>
     </ClInclude>
+    <ClInclude Include="..\Source\External\glslang\glslang\Public\ShaderLang.h">
+      <Filter>Source Files\External\Libs</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Source\External\glslang\SPIRV\GlslangToSpv.h">
+      <Filter>Source Files\External\Libs</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

@@ -9,8 +9,207 @@
 
 #include "GlslShader.hpp"
 
+// https://github.com/KhronosGroup/glslang
+#include "glslang/glslang/Public/ShaderLang.h"
+#include "glslang/SPIRV/GlslangToSpv.h"
+
 namespace VkToolbox
 {
+
+// ========================================================
+// GLSL to SPIR-V compilation helpers:
+// ========================================================
+
+// #version 150 assumed if unspecified - forward compatible only.
+static constexpr int  GlslDefaultVersion = 150;
+static constexpr bool GlslFwdCompatible  = true;
+
+static const TBuiltInResource * GlslGetBuiltInResources()
+{
+    static TBuiltInResource s_resources{};
+    static bool s_initialized = false;
+
+    if (!s_initialized)
+    {
+        s_resources.maxLights = 32;
+        s_resources.maxClipPlanes = 6;
+        s_resources.maxTextureUnits = 32;
+        s_resources.maxTextureCoords = 32;
+        s_resources.maxVertexAttribs = 64;
+        s_resources.maxVertexUniformComponents = 4096;
+        s_resources.maxVaryingFloats = 64;
+        s_resources.maxVertexTextureImageUnits = 32;
+        s_resources.maxCombinedTextureImageUnits = 80;
+        s_resources.maxTextureImageUnits = 32;
+        s_resources.maxFragmentUniformComponents = 4096;
+        s_resources.maxDrawBuffers = 32;
+        s_resources.maxVertexUniformVectors = 128;
+        s_resources.maxVaryingVectors = 8;
+        s_resources.maxFragmentUniformVectors = 16;
+        s_resources.maxVertexOutputVectors = 16;
+        s_resources.maxFragmentInputVectors = 15;
+        s_resources.minProgramTexelOffset = -8;
+        s_resources.maxProgramTexelOffset = 7;
+        s_resources.maxClipDistances = 8;
+        s_resources.maxComputeWorkGroupCountX = 65535;
+        s_resources.maxComputeWorkGroupCountY = 65535;
+        s_resources.maxComputeWorkGroupCountZ = 65535;
+        s_resources.maxComputeWorkGroupSizeX = 1024;
+        s_resources.maxComputeWorkGroupSizeY = 1024;
+        s_resources.maxComputeWorkGroupSizeZ = 64;
+        s_resources.maxComputeUniformComponents = 1024;
+        s_resources.maxComputeTextureImageUnits = 16;
+        s_resources.maxComputeImageUniforms = 8;
+        s_resources.maxComputeAtomicCounters = 8;
+        s_resources.maxComputeAtomicCounterBuffers = 1;
+        s_resources.maxVaryingComponents = 60;
+        s_resources.maxVertexOutputComponents = 64;
+        s_resources.maxGeometryInputComponents = 64;
+        s_resources.maxGeometryOutputComponents = 128;
+        s_resources.maxFragmentInputComponents = 128;
+        s_resources.maxImageUnits = 8;
+        s_resources.maxCombinedImageUnitsAndFragmentOutputs = 8;
+        s_resources.maxCombinedShaderOutputResources = 8;
+        s_resources.maxImageSamples = 0;
+        s_resources.maxVertexImageUniforms = 0;
+        s_resources.maxTessControlImageUniforms = 0;
+        s_resources.maxTessEvaluationImageUniforms = 0;
+        s_resources.maxGeometryImageUniforms = 0;
+        s_resources.maxFragmentImageUniforms = 8;
+        s_resources.maxCombinedImageUniforms = 8;
+        s_resources.maxGeometryTextureImageUnits = 16;
+        s_resources.maxGeometryOutputVertices = 256;
+        s_resources.maxGeometryTotalOutputComponents = 1024;
+        s_resources.maxGeometryUniformComponents = 1024;
+        s_resources.maxGeometryVaryingComponents = 64;
+        s_resources.maxTessControlInputComponents = 128;
+        s_resources.maxTessControlOutputComponents = 128;
+        s_resources.maxTessControlTextureImageUnits = 16;
+        s_resources.maxTessControlUniformComponents = 1024;
+        s_resources.maxTessControlTotalOutputComponents = 4096;
+        s_resources.maxTessEvaluationInputComponents = 128;
+        s_resources.maxTessEvaluationOutputComponents = 128;
+        s_resources.maxTessEvaluationTextureImageUnits = 16;
+        s_resources.maxTessEvaluationUniformComponents = 1024;
+        s_resources.maxTessPatchComponents = 120;
+        s_resources.maxPatchVertices = 32;
+        s_resources.maxTessGenLevel = 64;
+        s_resources.maxViewports = 16;
+        s_resources.maxVertexAtomicCounters = 0;
+        s_resources.maxTessControlAtomicCounters = 0;
+        s_resources.maxTessEvaluationAtomicCounters = 0;
+        s_resources.maxGeometryAtomicCounters = 0;
+        s_resources.maxFragmentAtomicCounters = 8;
+        s_resources.maxCombinedAtomicCounters = 8;
+        s_resources.maxAtomicCounterBindings = 1;
+        s_resources.maxVertexAtomicCounterBuffers = 0;
+        s_resources.maxTessControlAtomicCounterBuffers = 0;
+        s_resources.maxTessEvaluationAtomicCounterBuffers = 0;
+        s_resources.maxGeometryAtomicCounterBuffers = 0;
+        s_resources.maxFragmentAtomicCounterBuffers = 1;
+        s_resources.maxCombinedAtomicCounterBuffers = 1;
+        s_resources.maxAtomicCounterBufferSize = 16384;
+        s_resources.maxTransformFeedbackBuffers = 4;
+        s_resources.maxTransformFeedbackInterleavedComponents = 64;
+        s_resources.maxCullDistances = 8;
+        s_resources.maxCombinedClipAndCullDistances = 8;
+        s_resources.maxSamples = 4;
+        s_resources.limits.nonInductiveForLoops = 1;
+        s_resources.limits.whileLoops = 1;
+        s_resources.limits.doWhileLoops = 1;
+        s_resources.limits.generalUniformIndexing = 1;
+        s_resources.limits.generalAttributeMatrixVectorIndexing = 1;
+        s_resources.limits.generalVaryingIndexing = 1;
+        s_resources.limits.generalSamplerIndexing = 1;
+        s_resources.limits.generalVariableIndexing = 1;
+        s_resources.limits.generalConstantMatrixVectorIndexing = 1;
+
+        s_initialized = true;
+        Log::debugF("GLSL TBuiltInResource instance initialized.");
+    }
+
+    return &s_resources;
+}
+
+static EShLanguage GlslFindLanguage(const VkShaderStageFlagBits shaderType)
+{
+    switch (shaderType)
+    {
+    case VK_SHADER_STAGE_VERTEX_BIT                  : return EShLangVertex;
+    case VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT    : return EShLangTessControl;
+    case VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT : return EShLangTessEvaluation;
+    case VK_SHADER_STAGE_GEOMETRY_BIT                : return EShLangGeometry;
+    case VK_SHADER_STAGE_FRAGMENT_BIT                : return EShLangFragment;
+    case VK_SHADER_STAGE_COMPUTE_BIT                 : return EShLangCompute;
+    default : Log::fatalF("Invalid VK shader type enum %u", static_cast<unsigned>(shaderType));
+    } // switch
+}
+
+template<typename T>
+static void GlslPrintWarnings(T & shdr, const char * const typeName, const char * const shaderDebugName)
+{
+    if (shdr.getInfoLog()[0] != '\0')
+    {
+        str512 msg{ shdr.getInfoLog() };
+        msg.trim();
+
+        // This warning is really noisy and is emitted for every shader compilation.
+        // Not a very elegant way of silencing it, but... does the job in the lack
+        // of any other option to selectively disable warnings...
+        if (msg.starts_with("Warning, version") &&
+            msg.ends_with("is not yet complete; most version-specific features are present, but some are missing."))
+        {
+            return;
+        }
+
+        Log::warningF("Info log for GLSL %s '%s':", typeName, shaderDebugName);
+        Log::warningF("%s", msg.c_str());
+    }
+}
+
+static bool GlslToSPIRV(const VkShaderStageFlagBits shaderType, const char * const shaderDebugName,
+                        const array_view<const char *> glslSourceStrings, std::vector<std::uint32_t> * outSpirVBinary)
+{
+    assert(shaderDebugName   != nullptr);
+    assert(glslSourceStrings != nullptr);
+    assert(outSpirVBinary    != nullptr);
+
+    const EShLanguage stage = GlslFindLanguage(shaderType);
+    glslang::TShader  shader(stage);
+    glslang::TProgram program;
+
+    // Enable SPIR-V and Vulkan rules when parsing GLSL.
+    const auto messages = EShMessages(EShMsgSpvRules | EShMsgVulkanRules);
+
+    // Add the source code strings:
+    shader.setStrings(glslSourceStrings.data(), narrowCast<int>(glslSourceStrings.size()));
+
+    // Pre-process and parse:
+    if (!shader.parse(GlslGetBuiltInResources(), GlslDefaultVersion, GlslFwdCompatible, messages))
+    {
+        Log::errorF("*** Failed to compile GLSL shader '%s'. Error log: ***", shaderDebugName);
+        Log::errorF("%s", str512(shader.getInfoLog()).trim().c_str());
+        Log::errorF("%s", str512(shader.getInfoDebugLog()).trim().c_str());
+        Log::errorF("---------------------------------------------------");
+        return false;
+    }
+    GlslPrintWarnings(shader, "shader", shaderDebugName);
+
+    // Link the shader program:
+    program.addShader(&shader);
+    if (!program.link(messages))
+    {
+        Log::errorF("*** Failed to link GLSL program '%s'. Error log: ***", shaderDebugName);
+        Log::errorF("%s", str512(program.getInfoLog()).trim().c_str());
+        Log::errorF("%s", str512(program.getInfoDebugLog()).trim().c_str());
+        Log::errorF("---------------------------------------------------");
+        return false;
+    }
+    GlslPrintWarnings(program, "program", shaderDebugName);
+
+    glslang::GlslangToSpv(*program.getIntermediate(stage), *outSpirVBinary);
+    return true;
+}
 
 // ========================================================
 // GlslShaderStage enum lists:
@@ -55,7 +254,7 @@ GlslShader::GlslShader(GlslShader && other)
     : Resource{ other.m_vkContext, other.m_resId }
     , m_sourceCode{ std::move(other.m_sourceCode) }
     , m_stageCount{ other.m_stageCount }
-    , m_stages{ other.m_stages }
+    , m_stages{ std::move(other.m_stages) }
 {
     other.clear();
 }
@@ -68,16 +267,51 @@ GlslShader & GlslShader::operator = (GlslShader && other)
     m_resId      = other.m_resId;
     m_sourceCode = std::move(other.m_sourceCode);
     m_stageCount = other.m_stageCount;
-    m_stages     = other.m_stages;
+    m_stages     = std::move(other.m_stages);
 
     other.clear();
     return *this;
 }
 
+void GlslShader::setSourceCode(const char * const glslSource)
+{
+    // We will never modify the string except when deleting it.
+    char * nonConstPtr = const_cast<char *>(glslSource);
+    m_sourceCode.reset(nonConstPtr);
+}
+
+bool GlslShader::reloadCurrent()
+{
+    const char * const name = getId().getName();
+    if (isShutdown())
+    {
+        Log::warningF("Resource %s is already shutdown and cannot be loaded!", name);
+        return false;
+    }
+
+    int newStageCount = 0;
+    GlslShaderStageArray newStages{};
+    if (!createShaderStages(getVkContext(), m_sourceCode.get(), std::strlen(m_sourceCode.get()),
+                            &newStages, &newStageCount, name))
+    {
+        Log::warningF("Failed to create stages for shader '%s'", name);
+        return false;
+    }
+
+    auto oldSourceCode = std::move(m_sourceCode);
+
+    GlslShader::unload();
+
+    m_sourceCode = std::move(oldSourceCode);
+    m_stageCount = newStageCount;
+    m_stages     = std::move(newStages);
+
+    return true;
+}
+
 bool GlslShader::load()
 {
     const char * const name = getId().getName();
-
     if (isShutdown())
     {
         Log::warningF("Resource %s is already shutdown and cannot be loaded!", name);
@@ -94,9 +328,10 @@ bool GlslShader::load()
 
     int newStageCount = 0;
     GlslShaderStageArray newStages{};
-    if (!createShaderStages(getVkContext(), newSourceCode.get(), newSourceSize, &newStages, &newStageCount))
+    if (!createShaderStages(getVkContext(), newSourceCode.get(), newSourceSize,
+                            &newStages, &newStageCount, name))
     {
-        Log::warningF("Failed to create stages for shader %s!", name);
+        Log::warningF("Failed to create stages for shader '%s'", name);
         return false;
     }
 
@@ -104,7 +339,7 @@ bool GlslShader::load()
 
     m_sourceCode = std::move(newSourceCode);
     m_stageCount = newStageCount;
-    m_stages     = newStages;
+    m_stages     = std::move(newStages);
 
     return true;
 }
@@ -143,10 +378,9 @@ int GlslShader::getVkPipelineStages(array_view<VkPipelineShaderStageCreateInfo> 
 {
     assert(outStages != nullptr);
     assert(outStages.size() >= GlslShaderStage::MaxStages);
-    assert(getStageCount()  <= GlslShaderStage::MaxStages);
+    assert(m_stageCount <= GlslShaderStage::MaxStages);
 
-    const int count = getStageCount();
-    for (int s = 0; s < count; ++s)
+    for (int s = 0; s < m_stageCount; ++s)
     {
         outStages[s].sType  = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
         outStages[s].pNext  = nullptr;
@@ -156,19 +390,27 @@ int GlslShader::getVkPipelineStages(array_view<VkPipelineShaderStageCreateInfo> 
         outStages[s].pName  = "main";
         outStages[s].pSpecializationInfo = nullptr;
     }
-    return count;
+    return m_stageCount;
 }
 
 OwnedHandle<VkShaderModule> GlslShader::createShaderModule(const VulkanContext & vkContext,
-                                                           const char * const sourceCode,
-                                                           const std::size_t sourceLen)
+                                                           const VkShaderStageFlagBits shaderType,
+                                                           const char * const shaderDebugName,
+                                                           const array_view<const char *> glslSourceStrings)
 {
+    std::vector<std::uint32_t> spirvBinary;
+    if (!GlslToSPIRV(shaderType, shaderDebugName, glslSourceStrings, &spirvBinary))
+    {
+        Log::errorF("GLSL to SPIR-V compilation failed for shader '%s'", shaderDebugName);
+        return VK_NULL_HANDLE;
+    }
+
     VkShaderModuleCreateInfo shaderModuleInfo = {};
     shaderModuleInfo.sType    = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
     shaderModuleInfo.pNext    = nullptr;
     shaderModuleInfo.flags    = 0;
-    shaderModuleInfo.codeSize = sourceLen;
-    shaderModuleInfo.pCode    = reinterpret_cast<const std::uint32_t *>(sourceCode);
+    shaderModuleInfo.codeSize = (spirvBinary.size() * sizeof(std::uint32_t)); // size in bytes!
+    shaderModuleInfo.pCode    = spirvBinary.data();
 
     VkShaderModule shaderModule = VK_NULL_HANDLE;
     const VkResult result = vkCreateShaderModule(vkContext.getDevice(), &shaderModuleInfo,
@@ -185,7 +427,7 @@ OwnedHandle<VkShaderModule> GlslShader::createShaderModule(const VulkanContext &
 
 bool GlslShader::createShaderStages(const VulkanContext & vkContext, const char * const sourceCode,
                                     const std::size_t sourceLen, GlslShaderStageArray * outStages,
-                                    int * outStageCount)
+                                    int * outStageCount, const char * const shaderDebugName)
 {
     assert(sourceCode    != nullptr);
     assert(outStages     != nullptr);
@@ -276,10 +518,16 @@ bool GlslShader::createShaderStages(const VulkanContext & vkContext, const char 
             continue;
         }
 
+        // Default macros just get appended to the beginning as an extra source string.
+        const char * srcAndMacros[] = { GlslShaderPreproc::getAllDefinesString(), splitSources[s] };
+        array_view<const char *> glslSourceStrings{ srcAndMacros };
+
         const auto sourceStart  = static_cast<int>(splitSources[s] - tempSrc.get());
         const auto sourceLength = static_cast<int>(std::strlen(splitSources[s]));
 
-        VkShaderModule moduleHandle = createShaderModule(vkContext, splitSources[s], sourceLength);
+        VkShaderModule moduleHandle = createShaderModule(vkContext, GlslShaderStage::VkShaderStageFlags[s],
+                                                         shaderDebugName, glslSourceStrings);
+
         if (moduleHandle != VK_NULL_HANDLE)
         {
             GlslShaderStage & stage = (*outStages)[stageCount++];
@@ -315,6 +563,26 @@ bool GlslShader::createShaderStages(const VulkanContext & vkContext, const char 
 }
 
 // ========================================================
+// Static initialization and shutdown:
+// ========================================================
+
+void GlslShader::initClass()
+{
+    Log::debugF("---- GlslShader::initClass ----");
+
+    glslang::InitializeProcess();
+    GlslGetBuiltInResources(); // Create the shared instance.
+}
+
+void GlslShader::shutdownClass()
+{
+    Log::debugF("---- GlslShader::shutdownClass ----");
+
+    GlslShaderPreproc::shutdown();
+    glslang::FinalizeProcess();
+}
+
+// ========================================================
 // GlslShaderPreproc:
 // ========================================================
 
@@ -324,13 +592,19 @@ namespace GlslShaderPreproc
 // ========================================================
 // Globals:
 
+static int  s_glslVersionUsed       = GlslDefaultVersion;
+static bool s_allDefinesStrUpToDate = true;
+
+static str512 s_allDefinesString;
 static str256 s_globalShaderIncPath;
+
 static std::vector<Define> s_globalDefines;
+static std::vector<str128> s_glslExtensions;
 
 // ========================================================
 // Internal helpers:
 
-static Define * findDefineInternal(const char * const name)
+static Define * findDefineInternal(const char * const name, const bool mutating = true)
 {
     assert(name != nullptr);
     assert(name[0] != '\0');
@@ -339,6 +613,7 @@ static Define * findDefineInternal(const char * const name)
     {
         if (def.name == name)
         {
+            s_allDefinesStrUpToDate = !mutating;
             return &def;
         }
     }
@@ -353,6 +628,8 @@ static Define * setDefineInternal(const char * const name)
     Define newDefine;
     newDefine.name  = name;
     newDefine.index = getDefinesCount();
+
+    s_allDefinesStrUpToDate = false;
 
     s_globalDefines.push_back(newDefine);
     return &s_globalDefines.back();
@@ -421,9 +698,26 @@ int setDefine(const char * const name, const char * const value)
     return def->index;
 }
 
+void setExtension(const char * extName, const char * state)
+{
+    str128 ext;
+    ext.setf("#extension %s : %s", extName, state);
+    s_glslExtensions.emplace_back(std::move(ext));
+}
+
+void setVersion(const int version)
+{
+    s_glslVersionUsed = version;
+}
+
+int getVersion()
+{
+    return s_glslVersionUsed;
+}
+
 const Define * findDefine(const char * const name)
 {
-    return findDefineInternal(name);
+    return findDefineInternal(name, false);
 }
 
 const Define * getDefine(const int index)
@@ -435,9 +729,52 @@ const Define * getDefine(const int index)
     return &s_globalDefines[index];
 }
 
+const char * getAllDefinesString()
+{
+    if (!s_allDefinesStrUpToDate)
+    {
+        s_allDefinesString.clear_no_free();
+        s_allDefinesString.setf("#version %i\n", s_glslVersionUsed);
+
+        for (const str128 & ext : s_glslExtensions)
+        {
+            s_allDefinesString += ext;
+            s_allDefinesString += "\n";
+        }
+
+        for (const Define & def : s_globalDefines)
+        {
+            s_allDefinesString += "#define ";
+            s_allDefinesString += def.name;
+            s_allDefinesString += " ";
+            s_allDefinesString += def.value;
+            s_allDefinesString += "\n";
+        }
+
+        s_allDefinesStrUpToDate = true;
+    }
+
+    return s_allDefinesString.c_str();
+}
+
 int getDefinesCount()
 {
     return narrowCast<int>(s_globalDefines.size());
+}
+
+void shutdown()
+{
+    s_globalDefines.clear();
+    s_globalDefines.shrink_to_fit();
+
+    s_glslExtensions.clear();
+    s_glslExtensions.shrink_to_fit();
+
+    s_allDefinesString.clear();
+    s_globalShaderIncPath.clear();
+
+    s_glslVersionUsed       = GlslDefaultVersion;
+    s_allDefinesStrUpToDate = true;
 }
 
 // ========================================================
@@ -449,9 +786,9 @@ void setShaderIncludePath(const char * const pathEndingWithSlash)
     s_globalShaderIncPath = pathEndingWithSlash;
 }
 
-const str & getShaderIncludePath()
+const char * getShaderIncludePath()
 {
-    return s_globalShaderIncPath;
+    return s_globalShaderIncPath.c_str();
 }
 
 // ========================================================

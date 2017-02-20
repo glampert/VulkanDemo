@@ -13,9 +13,11 @@
 // so you only get the warnings when building with '/analyze'. Still better than nothing.
 #ifdef _MSC_VER
     #include <sal.h>
-    #define VKTB_PRINTF_LIKE _Printf_format_string_ 
+    #define VKTB_PRINTF_LIKE _Printf_format_string_
+    #define VKTB_NO_RETURN   __declspec(noreturn)
 #else // !_MSC_VER
     #define VKTB_PRINTF_LIKE /* nothing */
+    #define VKTB_NO_RETURN   /* nothing */
 #endif // _MSC_VER
 
 // For FILE* and var args.
@@ -45,7 +47,7 @@ FILE* getOutputStream();
 void debugF(VKTB_PRINTF_LIKE const char * fmt, ...);
 void warningF(VKTB_PRINTF_LIKE const char * fmt, ...);
 void errorF(VKTB_PRINTF_LIKE const char * fmt, ...);
-void fatalF(VKTB_PRINTF_LIKE const char * fmt, ...);
+VKTB_NO_RETURN void fatalF(VKTB_PRINTF_LIKE const char * fmt, ...);
 
 } // namespace Log
 } // namespace VkToolbox

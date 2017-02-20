@@ -142,9 +142,11 @@ void fatalF(VKTB_PRINTF_LIKE const char * fmt, ...)
 
     #if (DEBUG && (defined(WIN32) || defined(WIN64)))
     DebugBreak(); // Windows-specific
-    #else // !DEBUG or !WIN
-    std::abort();
     #endif // DEBUG and WIN
+
+    // This function is marked a noreturn, so keep the abort call,
+    // in case the debug break is skipped.
+    std::abort();
 }
 
 // ========================================================
