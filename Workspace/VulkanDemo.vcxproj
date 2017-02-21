@@ -197,6 +197,7 @@
     <ClInclude Include="..\Source\External\hash_index\hash_index.hpp" />
     <ClInclude Include="..\Source\External\str\str.hpp" />
     <ClInclude Include="..\Source\External\vectormath\vectormath.hpp" />
+    <ClInclude Include="..\Source\VkToolbox\FixedSizeArray.hpp" />
     <ClInclude Include="..\Source\VkToolbox\GlslShader.hpp" />
     <ClInclude Include="..\Source\VkToolbox\Hashing.hpp" />
     <ClInclude Include="..\Source\VkToolbox\Log.hpp" />

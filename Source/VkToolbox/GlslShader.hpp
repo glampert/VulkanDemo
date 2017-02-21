@@ -9,7 +9,7 @@
 // ================================================================================================
 
 #include "Resource.hpp"
-#include <array>
+#include "FixedSizeArray.hpp"
 
 namespace VkToolbox
 {
@@ -41,9 +41,14 @@ struct GlslShaderStage final
     int sourceStart  = 0;
     int sourceLength = 0;
     OwnedHandle<VkShaderModule> moduleHandle = VK_NULL_HANDLE;
+
+    bool isValid() const
+    {
+        return moduleHandle != VK_NULL_HANDLE;
+    }
 };
 
-using GlslShaderStageArray = std::array<GlslShaderStage, GlslShaderStage::MaxStages>;
+using GlslShaderStageArray = FixedSizeArray<GlslShaderStage, GlslShaderStage::MaxStages>;
 
 // ========================================================
 // GlslShaderPreproc:
@@ -151,7 +156,7 @@ private:
     // split the string for the different shader stages, then creates a VK shader module for each tag found.
     static bool createShaderStages(const VulkanContext & vkContext, const char * sourceCode,
                                    std::size_t sourceLen, GlslShaderStageArray * outStages,
-                                   int * outStageCount, const char * shaderDebugName);
+                                   const char * shaderDebugName);
 
 private:
 
@@ -159,8 +164,7 @@ private:
     std::unique_ptr<char[]> m_sourceCode;
 
     // Shader stages initialized from the source code.
-    // m_stages can be in any order, not necessarily matching the Id enum.
-    int m_stageCount;
+    // Stages can be in any order, not necessarily matching the Id enum.
     GlslShaderStageArray m_stages;
 };
 
@@ -168,7 +172,7 @@ private:
 
 inline bool GlslShader::isLoaded() const
 {
-    return (m_sourceCode != nullptr && m_stageCount > 0);
+    return (m_sourceCode != nullptr && !m_stages.empty());
 }
 
 inline const char * GlslShader::getSourceCode() const
@@ -178,19 +182,17 @@ inline const char * GlslShader::getSourceCode() const
 
 inline int GlslShader::getStageCount() const
 {
-    return m_stageCount;
+    return m_stages.size();
 }
 
 inline const GlslShaderStage & GlslShader::getStage(const int index) const
 {
-    assert(index >= 0);
-    assert(index < m_stageCount);
     return m_stages[index];
 }
 
 inline const GlslShaderStage * GlslShader::findStageById(const GlslShaderStage::Id id) const
 {
-    for (int s = 0; s < m_stageCount; ++s)
+    for (int s = 0; s < m_stages.size(); ++s)
     {
         if (m_stages[s].id == id)
         {

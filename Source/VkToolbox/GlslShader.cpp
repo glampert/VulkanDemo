@@ -240,7 +240,6 @@ const enum_array<GlslShaderStage::Id, VkShaderStageFlagBits> GlslShaderStage::Vk
 GlslShader::GlslShader(WeakRef<const VulkanContext> vkContext, ResourceId id)
     : Resource{ vkContext, id }
     , m_sourceCode{ nullptr }
-    , m_stageCount{ 0 }
     , m_stages{}
 {
 }
@@ -253,7 +252,6 @@ GlslShader::~GlslShader()
 GlslShader::GlslShader(GlslShader && other)
     : Resource{ other.m_vkContext, other.m_resId }
     , m_sourceCode{ std::move(other.m_sourceCode) }
-    , m_stageCount{ other.m_stageCount }
     , m_stages{ std::move(other.m_stages) }
 {
     other.clear();
@@ -266,7 +264,6 @@ GlslShader & GlslShader::operator = (GlslShader && other)
     m_vkContext  = other.m_vkContext;
     m_resId      = other.m_resId;
     m_sourceCode = std::move(other.m_sourceCode);
-    m_stageCount = other.m_stageCount;
     m_stages     = std::move(other.m_stages);
 
     other.clear();
@@ -289,10 +286,9 @@ bool GlslShader::reloadCurrent()
         return false;
     }
 
-    int newStageCount = 0;
     GlslShaderStageArray newStages{};
-    if (!createShaderStages(getVkContext(), m_sourceCode.get(), std::strlen(m_sourceCode.get()),
-                            &newStages, &newStageCount, name))
+    const auto sourceLen = std::strlen(m_sourceCode.get());
+    if (!createShaderStages(getVkContext(), m_sourceCode.get(), sourceLen, &newStages, name))
     {
         Log::warningF("Failed to create stages for shader '%s'", name);
         return false;
@@ -303,7 +299,6 @@ bool GlslShader::reloadCurrent()
     GlslShader::unload();
 
     m_sourceCode = std::move(oldSourceCode);
-    m_stageCount = newStageCount;
     m_stages     = std::move(newStages);
 
     return true;
@@ -326,10 +321,8 @@ bool GlslShader::load()
         return false;
     }
 
-    int newStageCount = 0;
     GlslShaderStageArray newStages{};
-    if (!createShaderStages(getVkContext(), newSourceCode.get(), newSourceSize,
-                            &newStages, &newStageCount, name))
+    if (!createShaderStages(getVkContext(), newSourceCode.get(), newSourceSize, &newStages, name))
     {
         Log::warningF("Failed to create stages for shader '%s'", name);
         return false;
@@ -338,7 +331,6 @@ bool GlslShader::load()
     GlslShader::unload();
 
     m_sourceCode = std::move(newSourceCode);
-    m_stageCount = newStageCount;
     m_stages     = std::move(newStages);
 
     return true;
@@ -347,15 +339,15 @@ bool GlslShader::load()
 void GlslShader::unload()
 {
     // Release the old stage modules if needed:
-    if (m_stageCount > 0)
+    if (!m_stages.empty())
     {
         WeakHandle<VkDevice> device = getVkContext().getDevice();
         WeakRef<const VkAllocationCallbacks> allocator = getVkContext().getAllocationCallbacks();
-        for (int s = 0; s < m_stageCount; ++s)
+        for (int s = 0; s < m_stages.size(); ++s)
         {
             vkDestroyShaderModule(device, m_stages[s].moduleHandle, allocator);
         }
-        m_stageCount = 0;
+        m_stages.clear();
     }
     m_sourceCode = nullptr;
 }
@@ -370,17 +362,16 @@ void GlslShader::clear()
 {
     Resource::clear();
     m_sourceCode = nullptr;
-    m_stageCount = 0;
-    m_stages.fill({});
+    m_stages.clear();
 }
 
 int GlslShader::getVkPipelineStages(array_view<VkPipelineShaderStageCreateInfo> outStages) const
 {
     assert(outStages != nullptr);
     assert(outStages.size() >= GlslShaderStage::MaxStages);
-    assert(m_stageCount <= GlslShaderStage::MaxStages);
+    assert(m_stages.size()  <= GlslShaderStage::MaxStages);
 
-    for (int s = 0; s < m_stageCount; ++s)
+    for (int s = 0; s < m_stages.size(); ++s)
     {
         outStages[s].sType  = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
         outStages[s].pNext  = nullptr;
@@ -390,7 +381,7 @@ int GlslShader::getVkPipelineStages(array_view<VkPipelineShaderStageCreateInfo> 
         outStages[s].pName  = "main";
         outStages[s].pSpecializationInfo = nullptr;
     }
-    return m_stageCount;
+    return m_stages.size();
 }
 
 OwnedHandle<VkShaderModule> GlslShader::createShaderModule(const VulkanContext & vkContext,
@@ -427,11 +418,10 @@ OwnedHandle<VkShaderModule> GlslShader::createShaderModule(const VulkanContext &
 
 bool GlslShader::createShaderStages(const VulkanContext & vkContext, const char * const sourceCode,
                                     const std::size_t sourceLen, GlslShaderStageArray * outStages,
-                                    int * outStageCount, const char * const shaderDebugName)
+                                    const char * const shaderDebugName)
 {
-    assert(sourceCode    != nullptr);
-    assert(outStages     != nullptr);
-    assert(outStageCount != nullptr);
+    assert(sourceCode != nullptr);
+    assert(outStages  != nullptr);
 
     int numStagesFound = 0;
     std::array<const char *, GlslShaderStage::MaxStages> splitSources;
@@ -509,8 +499,6 @@ bool GlslShader::createShaderStages(const VulkanContext & vkContext, const char 
     }
 
     int failedCount = 0;
-    int stageCount  = 0;
-
     for (int s = 0; s < GlslShaderStage::MaxStages; ++s)
     {
         if (splitSources[s] == nullptr)
@@ -530,11 +518,12 @@ bool GlslShader::createShaderStages(const VulkanContext & vkContext, const char 
 
         if (moduleHandle != VK_NULL_HANDLE)
         {
-            GlslShaderStage & stage = (*outStages)[stageCount++];
-            stage.id                = GlslShaderStage::Id(s);
-            stage.sourceStart       = sourceStart;
-            stage.sourceLength      = sourceLength;
-            stage.moduleHandle      = moduleHandle;
+            GlslShaderStage stage;
+            stage.id           = GlslShaderStage::Id(s);
+            stage.sourceStart  = sourceStart;
+            stage.sourceLength = sourceLength;
+            stage.moduleHandle = moduleHandle;
+            outStages->push(stage);
         }
         else
         {
@@ -548,17 +537,15 @@ bool GlslShader::createShaderStages(const VulkanContext & vkContext, const char 
         WeakHandle<VkDevice> device = vkContext.getDevice();
         WeakRef<const VkAllocationCallbacks> allocator = vkContext.getAllocationCallbacks();
 
-        for (int s = 0; s < stageCount; ++s)
+        for (int s = 0; s < outStages->size(); ++s)
         {
             vkDestroyShaderModule(device, (*outStages)[s].moduleHandle, allocator);
         }
 
-        outStages->fill({});
-        (*outStageCount) = 0;
+        outStages->clear();
         return false;
     }
 
-    (*outStageCount) = stageCount;
     return true;
 }
 

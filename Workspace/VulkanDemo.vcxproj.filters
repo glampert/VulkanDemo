@@ -111,5 +111,8 @@
     <ClInclude Include="..\Source\External\glslang\SPIRV\GlslangToSpv.h">
       <Filter>Source Files\External\Libs</Filter>
     </ClInclude>
+    <ClInclude Include="..\Source\VkToolbox\FixedSizeArray.hpp">
+      <Filter>Source Files\VkToolbox</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>
