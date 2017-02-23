@@ -47,19 +47,21 @@ int main()
     {
         GlslShader::initClass();
 
-        GlslShaderPreproc::setVersion(450);
+        GlslShaderPreproc::setVersion(450, true, true);
         GlslShaderPreproc::setExtension("GL_ARB_separate_shader_objects",  "enable");
         GlslShaderPreproc::setExtension("GL_ARB_shading_language_420pack", "enable");
+        GlslShaderPreproc::setExtension("GL_GOOGLE_include_directive",     "enable");
 
         GlslShaderPreproc::setDefine("POS_LOC",       0);
         GlslShaderPreproc::setDefine("COLOR_IN_LOC",  1);
         GlslShaderPreproc::setDefine("COLOR_OUT_LOC", 0);
 
+        GlslShaderPreproc::setShaderIncludePath("test_includes/sys/");
+
         str32 shdrName = "test.glsl";
         GlslShader shdr{ &vkCtx, ResourceId{ &shdrName, Hash64{ shdrName.c_str() } } };
         shdr.load();
 
-        //TODO: shader #includes support!
         //TODO: need to query the uniform variables from the shader compiler!
 
         GlslShader::shutdownClass();

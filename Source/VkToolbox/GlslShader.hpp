@@ -72,20 +72,25 @@ int setDefine(const char * name, const char * value);
 
 // Set #version directive and #extension directives used by all shaders.
 void setExtension(const char * extName, const char * state);
-void setVersion(int version);
-int getVersion();
+void setVersion(int version, bool core, bool fwdCompat);
 
 // Find a global shader #define. Null when not found or bad index.
 const Define * findDefine(const char * name);
 const Define * getDefine(int index);
 
-const char * getAllDefinesString();
+// Number of #defines only.
 int getDefinesCount();
-void shutdown();
+
+// Combined string with all #defines, #extensions and #version.
+const char * getAllDefinesString();
+int getAllDefinesStringLength();
 
 // Set/get the include path appended to all shader #includes. Initially empty.
 void setShaderIncludePath(const char * pathEndingWithSlash);
 const char * getShaderIncludePath();
+
+// Removes all define, extension, version directives and clears the default include path.
+void shutdown();
 
 } // namespace GlslShaderPreproc
 
@@ -149,14 +154,17 @@ private:
     // Creates a single VK shader module from the null-terminated GLSL source code strings.
     static OwnedHandle<VkShaderModule> createShaderModule(const VulkanContext & vkContext,
                                                           const VkShaderStageFlagBits shaderType,
-                                                          const char * shaderDebugName,
-                                                          const array_view<const char *> glslSourceStrings);
+                                                          const char * const shaderDebugName,
+                                                          const array_view<const char *> glslSourceStrings,
+                                                          const array_view<const int> glslSourceStringLengths);
 
     // Create stages from an annotated GLSL source code string. This looks for the custom tags that
     // split the string for the different shader stages, then creates a VK shader module for each tag found.
-    static bool createShaderStages(const VulkanContext & vkContext, const char * sourceCode,
-                                   std::size_t sourceLen, GlslShaderStageArray * outStages,
-                                   const char * shaderDebugName);
+    static bool createShaderStages(const VulkanContext & vkContext,
+                                   const char * const sourceCode,
+                                   const std::size_t sourceLen,
+                                   const char * const shaderDebugName,
+                                   GlslShaderStageArray * outStages);
 
 private:
 

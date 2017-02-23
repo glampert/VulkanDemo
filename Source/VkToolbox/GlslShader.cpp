@@ -20,9 +20,10 @@ namespace VkToolbox
 // GLSL to SPIR-V compilation helpers:
 // ========================================================
 
-// #version 150 assumed if unspecified - forward compatible only.
-static constexpr int  GlslDefaultVersion = 150;
-static constexpr bool GlslFwdCompatible  = true;
+// #version 150 assumed if unspecified - backward compatible.
+static int      s_glslVersionUsed   = 150;
+static bool     s_glslFwdCompatible = false;
+static EProfile s_glslProfileUsed   = ECompatibilityProfile;
 
 static const TBuiltInResource * GlslGetBuiltInResources()
 {
@@ -114,15 +115,15 @@ static const TBuiltInResource * GlslGetBuiltInResources()
         s_resources.maxCullDistances = 8;
         s_resources.maxCombinedClipAndCullDistances = 8;
         s_resources.maxSamples = 4;
-        s_resources.limits.nonInductiveForLoops = 1;
-        s_resources.limits.whileLoops = 1;
-        s_resources.limits.doWhileLoops = 1;
-        s_resources.limits.generalUniformIndexing = 1;
-        s_resources.limits.generalAttributeMatrixVectorIndexing = 1;
-        s_resources.limits.generalVaryingIndexing = 1;
-        s_resources.limits.generalSamplerIndexing = 1;
-        s_resources.limits.generalVariableIndexing = 1;
-        s_resources.limits.generalConstantMatrixVectorIndexing = 1;
+        s_resources.limits.nonInductiveForLoops = true;
+        s_resources.limits.whileLoops = true;
+        s_resources.limits.doWhileLoops = true;
+        s_resources.limits.generalUniformIndexing = true;
+        s_resources.limits.generalAttributeMatrixVectorIndexing = true;
+        s_resources.limits.generalVaryingIndexing = true;
+        s_resources.limits.generalSamplerIndexing = true;
+        s_resources.limits.generalVariableIndexing = true;
+        s_resources.limits.generalConstantMatrixVectorIndexing = true;
 
         s_initialized = true;
         Log::debugF("GLSL TBuiltInResource instance initialized.");
@@ -167,25 +168,108 @@ static void GlslPrintWarnings(T & shdr, const char * const typeName, const char 
     }
 }
 
-static bool GlslToSPIRV(const VkShaderStageFlagBits shaderType, const char * const shaderDebugName,
-                        const array_view<const char *> glslSourceStrings, std::vector<std::uint32_t> * outSpirVBinary)
+namespace {
+class MyGlslIncluder final
+    : public glslang::TShader::Includer
 {
-    assert(shaderDebugName   != nullptr);
+public:
+
+    // "System" includes will add the default include path to the name.
+    IncludeResult * includeSystem(const char * headerName,
+                                  const char * includerName,
+                                  std::size_t inclusionDepth) override
+    {
+        Log::debugF("Parsing (sys) shader #include <%s> from '%s' (depth=%zu)",
+                    headerName, includerName, inclusionDepth);
+        return doInclude(headerName, true);
+    }
+
+    // "Local" includes assume a complete path and don't append the default include path.
+    IncludeResult * includeLocal(const char * headerName,
+                                 const char * includerName,
+                                 std::size_t inclusionDepth) override
+    {
+        Log::debugF("Parsing (local) shader #include \"%s\" from '%s' (depth=%zu)",
+                    headerName, includerName, inclusionDepth);
+        return doInclude(headerName, false);
+    }
+
+    static IncludeResult * doInclude(const char * const headerName, const bool appendDefaultPath)
+    {
+        assert(headerName != nullptr);
+        assert(headerName[0] != '\0');
+
+        str512 fullFilePath;
+        if (appendDefaultPath)
+        {
+            fullFilePath = GlslShaderPreproc::getShaderIncludePath();
+            fullFilePath += headerName;
+        }
+        else
+        {
+            fullFilePath = headerName;
+        }
+
+        std::size_t sourceSize = 0;
+        std::unique_ptr<char[]> sourceCode = loadTextFile(fullFilePath.c_str(), &sourceSize);
+        if (sourceCode == nullptr || sourceSize == 0)
+        {
+            Log::errorF("Couldn't load shader include file '%s'", fullFilePath.c_str());
+            return nullptr;
+        }
+
+        return new IncludeResult{ fullFilePath.c_str(), sourceCode.release(), sourceSize, nullptr };
+    }
+
+    void releaseInclude(IncludeResult * toRelease) override
+    {
+        if (toRelease != nullptr)
+        {
+            delete[] (toRelease->headerData);
+            delete toRelease;
+        }
+    }
+}; // MyGlslIncluder
+}  // namespace
+
+static bool GlslToSPIRV(const VkShaderStageFlagBits shaderType,
+                        const char * const shaderDebugName,
+                        const array_view<const char *> glslSourceStrings,
+                        const array_view<const int> glslSourceStringLengths,
+                        std::vector<std::uint32_t> * outSpirVBinary)
+{
+    assert(shaderDebugName != nullptr);
     assert(glslSourceStrings != nullptr);
-    assert(outSpirVBinary    != nullptr);
+    assert(glslSourceStringLengths != nullptr);
+    assert(outSpirVBinary != nullptr);
 
     const EShLanguage stage = GlslFindLanguage(shaderType);
     glslang::TShader  shader(stage);
     glslang::TProgram program;
+    MyGlslIncluder    myIncluder;
+
+    assert(glslSourceStrings.size() == glslSourceStringLengths.size());
+    const auto numOfStrings = narrowCast<int>(glslSourceStrings.size());
+
+    FixedSizeArray<const char *, 32> glslStringNames; // 32 strings max for now - way more than needed atm!
+    for (std::size_t i = 0; i < glslSourceStrings.size(); ++i)
+    {
+        glslStringNames.push(shaderDebugName);
+    }
+
+    // Add the source code strings:
+    shader.setStringsWithLengthsAndNames(
+            glslSourceStrings.data(), 
+            glslSourceStringLengths.data(),
+            glslStringNames.data(),
+            numOfStrings);
 
     // Enable SPIR-V and Vulkan rules when parsing GLSL.
     const auto messages = EShMessages(EShMsgSpvRules | EShMsgVulkanRules);
 
-    // Add the source code strings:
-    shader.setStrings(glslSourceStrings.data(), narrowCast<int>(glslSourceStrings.size()));
-
     // Pre-process and parse:
-    if (!shader.parse(GlslGetBuiltInResources(), GlslDefaultVersion, GlslFwdCompatible, messages))
+    if (!shader.parse(GlslGetBuiltInResources(), s_glslVersionUsed, s_glslProfileUsed,
+                      false, s_glslFwdCompatible, messages, myIncluder))
     {
         Log::errorF("*** Failed to compile GLSL shader '%s'. Error log: ***", shaderDebugName);
         Log::errorF("%s", str512(shader.getInfoLog()).trim().c_str());
@@ -288,7 +372,7 @@ bool GlslShader::reloadCurrent()
 
     GlslShaderStageArray newStages{};
     const auto sourceLen = std::strlen(m_sourceCode.get());
-    if (!createShaderStages(getVkContext(), m_sourceCode.get(), sourceLen, &newStages, name))
+    if (!createShaderStages(getVkContext(), m_sourceCode.get(), sourceLen, name, &newStages))
     {
         Log::warningF("Failed to create stages for shader '%s'", name);
         return false;
@@ -322,7 +406,7 @@ bool GlslShader::load()
     }
 
     GlslShaderStageArray newStages{};
-    if (!createShaderStages(getVkContext(), newSourceCode.get(), newSourceSize, &newStages, name))
+    if (!createShaderStages(getVkContext(), newSourceCode.get(), newSourceSize, name, &newStages))
     {
         Log::warningF("Failed to create stages for shader '%s'", name);
         return false;
@@ -387,10 +471,11 @@ int GlslShader::getVkPipelineStages(array_view<VkPipelineShaderStageCreateInfo> 
 OwnedHandle<VkShaderModule> GlslShader::createShaderModule(const VulkanContext & vkContext,
                                                            const VkShaderStageFlagBits shaderType,
                                                            const char * const shaderDebugName,
-                                                           const array_view<const char *> glslSourceStrings)
+                                                           const array_view<const char *> glslSourceStrings,
+                                                           const array_view<const int> glslSourceStringLengths)
 {
     std::vector<std::uint32_t> spirvBinary;
-    if (!GlslToSPIRV(shaderType, shaderDebugName, glslSourceStrings, &spirvBinary))
+    if (!GlslToSPIRV(shaderType, shaderDebugName, glslSourceStrings, glslSourceStringLengths, &spirvBinary))
     {
         Log::errorF("GLSL to SPIR-V compilation failed for shader '%s'", shaderDebugName);
         return VK_NULL_HANDLE;
@@ -416,9 +501,11 @@ OwnedHandle<VkShaderModule> GlslShader::createShaderModule(const VulkanContext &
     return shaderModule;
 }
 
-bool GlslShader::createShaderStages(const VulkanContext & vkContext, const char * const sourceCode,
-                                    const std::size_t sourceLen, GlslShaderStageArray * outStages,
-                                    const char * const shaderDebugName)
+bool GlslShader::createShaderStages(const VulkanContext & vkContext,
+                                    const char * const sourceCode,
+                                    const std::size_t sourceLen,
+                                    const char * const shaderDebugName,
+                                    GlslShaderStageArray * outStages)
 {
     assert(sourceCode != nullptr);
     assert(outStages  != nullptr);
@@ -506,15 +593,18 @@ bool GlslShader::createShaderStages(const VulkanContext & vkContext, const char 
             continue;
         }
 
-        // Default macros just get appended to the beginning as an extra source string.
-        const char * srcAndMacros[] = { GlslShaderPreproc::getAllDefinesString(), splitSources[s] };
-        array_view<const char *> glslSourceStrings{ srcAndMacros };
-
         const auto sourceStart  = static_cast<int>(splitSources[s] - tempSrc.get());
         const auto sourceLength = static_cast<int>(std::strlen(splitSources[s]));
 
+        // Default macros/directives just get appended to the beginning as an extra source string.
+        const char * srcAndMacros[] = { GlslShaderPreproc::getAllDefinesString(), splitSources[s] };
+        const array_view<const char *> glslSourceStrings{ srcAndMacros };
+
+        const int srcAndMacrosLengths[] = { GlslShaderPreproc::getAllDefinesStringLength(), sourceLength };
+        const array_view<const int> glslSourceStringLengths{ srcAndMacrosLengths };
+
         VkShaderModule moduleHandle = createShaderModule(vkContext, GlslShaderStage::VkShaderStageFlags[s],
-                                                         shaderDebugName, glslSourceStrings);
+                                                         shaderDebugName, glslSourceStrings, glslSourceStringLengths);
 
         if (moduleHandle != VK_NULL_HANDLE)
         {
@@ -558,7 +648,7 @@ void GlslShader::initClass()
     Log::debugF("---- GlslShader::initClass ----");
 
     glslang::InitializeProcess();
-    GlslGetBuiltInResources(); // Create the shared instance.
+    (void)GlslGetBuiltInResources(); // Create the shared instance.
 }
 
 void GlslShader::shutdownClass()
@@ -579,7 +669,6 @@ namespace GlslShaderPreproc
 // ========================================================
 // Globals:
 
-static int  s_glslVersionUsed       = GlslDefaultVersion;
 static bool s_allDefinesStrUpToDate = true;
 
 static str512 s_allDefinesString;
@@ -692,14 +781,11 @@ void setExtension(const char * extName, const char * state)
     s_glslExtensions.emplace_back(std::move(ext));
 }
 
-void setVersion(const int version)
+void setVersion(const int version, const bool core, const bool fwdCompat)
 {
-    s_glslVersionUsed = version;
-}
-
-int getVersion()
-{
-    return s_glslVersionUsed;
+    s_glslVersionUsed   = version;
+    s_glslFwdCompatible = fwdCompat;
+    s_glslProfileUsed   = (core ? ECoreProfile : ECompatibilityProfile);
 }
 
 const Define * findDefine(const char * const name)
@@ -721,7 +807,9 @@ const char * getAllDefinesString()
     if (!s_allDefinesStrUpToDate)
     {
         s_allDefinesString.clear_no_free();
-        s_allDefinesString.setf("#version %i\n", s_glslVersionUsed);
+
+        s_allDefinesString.setf("#version %i%s\n", 
+            s_glslVersionUsed, (s_glslProfileUsed == ECoreProfile ? " core" : ""));
 
         for (const str128 & ext : s_glslExtensions)
         {
@@ -744,6 +832,12 @@ const char * getAllDefinesString()
     return s_allDefinesString.c_str();
 }
 
+int getAllDefinesStringLength()
+{
+    (void)getAllDefinesString(); // Make sure the cached string is updated if needed!
+    return s_allDefinesString.length();
+}
+
 int getDefinesCount()
 {
     return narrowCast<int>(s_globalDefines.size());
@@ -760,7 +854,6 @@ void shutdown()
     s_allDefinesString.clear();
     s_globalShaderIncPath.clear();
 
-    s_glslVersionUsed       = GlslDefaultVersion;
     s_allDefinesStrUpToDate = true;
 }
 
