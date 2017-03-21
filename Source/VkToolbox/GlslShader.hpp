@@ -104,7 +104,7 @@ class GlslShader final
 public:
 
     // Perform static initialization and shutdown for the shared state required
-    // by the GLSL to SPIR-V compiler. We must call the initialization at least
+    // by the GLSL to SPIR-V compiler. Initialization must be called at least
     // once before creating an instance of a GlslShader.
     static void initClass();
     static void shutdownClass();
@@ -127,12 +127,12 @@ public:
     bool reloadCurrent();
 
     // Set the GLSL source code. This can be useful, for example, to create a shader
-    // instance from an embedded C string, then calling reloadCurrent() to create the stages.
-    // NOTE: GlslShader will take ownership of the pointer and delete it when the class instance is destroyed.
+    // instance from an embedded C string, then calling reloadCurrent() to create the
+    // stages. NOTE: GlslShader will take ownership of the pointer and delete it when
+    // the shader class instance is destroyed.
     void setSourceCode(const char * glslSource);
 
-    // Read-only access to the GLSL source code
-    // (owned by the shader unless specified otherwise by setShaderSource).
+    // Read-only access to the GLSL source code (owned by the shader instance).
     const char * getSourceCode() const;
 
     // Shader stage access:

@@ -12,6 +12,14 @@ Vk demo idea 2:
  - Render many instances of animated MD5 models
  - Something like the CoreGL demo I did before, but with several model instances instead, each running a different animation;
  - Explore some way of updating them in parallel (each thread animates and renders a single model)
+
+Vk demo idea 3:
+ - Virtual Texturing revisited!
+ - 256 page size with inner border (or outer?)
+ - Trilinear sw filter to save memory?
+ - Use compute shaders to process page id feedback buffer.
+ - Explore virtual decals?
+ - Compress the indirection texture to save mem?
 */
 
 #include <direct.h>
@@ -44,6 +52,7 @@ int main()
     vkCtx.logInstanceLayerProperties();
 
     // Test shader
+    /*
     {
         GlslShader::initClass();
 
@@ -66,6 +75,7 @@ int main()
 
         GlslShader::shutdownClass();
     }
+    */
 
     window.runEventLoop();
 }
