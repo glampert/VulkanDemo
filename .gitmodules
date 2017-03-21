@@ -16,3 +16,6 @@
 [submodule "Source/External/glslang"]
 	path = Source/External/glslang
 	url = https://github.com/KhronosGroup/glslang.git
+[submodule "Source/External/stb"]
+	path = Source/External/stb
+	url = git@github.com:nothings/stb.git

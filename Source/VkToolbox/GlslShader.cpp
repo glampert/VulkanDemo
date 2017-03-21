@@ -648,7 +648,7 @@ void GlslShader::initClass()
     Log::debugF("---- GlslShader::initClass ----");
 
     glslang::InitializeProcess();
-    (void)GlslGetBuiltInResources(); // Create the shared instance.
+    GlslGetBuiltInResources(); // Force creating the shared instance.
 }
 
 void GlslShader::shutdownClass()
@@ -834,7 +834,7 @@ const char * getAllDefinesString()
 
 int getAllDefinesStringLength()
 {
-    (void)getAllDefinesString(); // Make sure the cached string is updated if needed!
+    getAllDefinesString(); // Make sure the cached string is updated if needed!
     return s_allDefinesString.length();
 }
 
