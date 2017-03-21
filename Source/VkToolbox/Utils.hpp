@@ -59,6 +59,75 @@ inline void clamp(T * inOutVal, const T minVal, const T maxVal)
     else if ((*inOutVal) > maxVal) { (*inOutVal) = maxVal; }
 }
 
+// Test if an integer is a power of two. Always false if the number is negative.
+template<typename T>
+inline bool isPowerOfTwo(const T x)
+{
+    return (x > 0) && ((x & (x - 1)) == 0);
+}
+
+// Round down an integer to a power of two. The output is never greater than the input.
+template<typename T>
+inline T roundDownToPowerOfTwo(const T x)
+{
+    T p2;
+    for (p2 = 1; (p2 * 2) <= x; p2 <<= 1) { }
+    return p2;
+}
+
+// Rounds an integer to its next power of two. Example: 37 => 64.
+template<typename T>
+inline T roundUpToPowerOfTwo(T x)
+{
+    if (x == 0)
+    {
+        return 1;
+    }
+    --x;
+    for (T i = 1; i < sizeof(T) * 8; i <<= 1)
+    {
+        x = x | x >> i;
+    }
+    return ++x;
+}
+
+// ========================================================
+
+// Adds the minimum extra needed to the size for pointer alignment.
+// This size can then be used to malloc some memory and then have
+// the pointer aligned with alignPtr().
+template<typename T>
+inline T alignSize(const T size, const T alignment)
+{
+    assert(isPowerOfTwo(alignment));
+    return size + (alignment - 1);
+}
+
+// Aligned if the pointer is evenly divisible by the alignment value.
+// Same as '(ptr % align) == 0' (The '&' trick works with PoT alignments only!).
+inline bool isAlignedPtr(const void * ptr, const std::size_t alignment)
+{
+    assert(isPowerOfTwo(alignment));
+    return (reinterpret_cast<std::uintptr_t>(ptr) & (alignment - 1)) == 0;
+}
+
+// Align the pointer address to a given byte boundary.
+// This should normally be used in conjunction with alignSize().
+template<typename T>
+inline T * alignPtr(const T * ptr, const std::size_t alignment)
+{
+    assert(isPowerOfTwo(alignment));
+
+    // Cast to integer and align:
+    const std::uintptr_t uintPtr = reinterpret_cast<std::uintptr_t>(ptr);
+    const std::uintptr_t alignedPtr = (uintPtr + (alignment - 1)) & ~(alignment - 1);
+
+    // Re-cast to pointer, validate and return:
+    T * userPtr = reinterpret_cast<T *>(alignedPtr);
+    assert(isAlignedPtr(userPtr, alignment));
+    return userPtr;
+}
+
 // ========================================================
 
 // Width and height pair.

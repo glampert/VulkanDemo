@@ -180,6 +180,7 @@
     </ClCompile>
     <ClCompile Include="..\Source\VkToolbox\GlslShader.cpp" />
     <ClCompile Include="..\Source\VkToolbox\Hashing.cpp" />
+    <ClCompile Include="..\Source\VkToolbox\Image.cpp" />
     <ClCompile Include="..\Source\VkToolbox\Log.cpp" />
     <ClCompile Include="..\Source\VkToolbox\OSWindow.cpp" />
     <ClCompile Include="..\Source\VkToolbox\Resource.cpp" />
@@ -195,11 +196,15 @@
     <ClInclude Include="..\Source\External\glslang\glslang\Public\ShaderLang.h" />
     <ClInclude Include="..\Source\External\glslang\SPIRV\GlslangToSpv.h" />
     <ClInclude Include="..\Source\External\hash_index\hash_index.hpp" />
+    <ClInclude Include="..\Source\External\stb\stb_image.h" />
+    <ClInclude Include="..\Source\External\stb\stb_image_resize.h" />
+    <ClInclude Include="..\Source\External\stb\stb_image_write.h" />
     <ClInclude Include="..\Source\External\str\str.hpp" />
     <ClInclude Include="..\Source\External\vectormath\vectormath.hpp" />
     <ClInclude Include="..\Source\VkToolbox\FixedSizeArray.hpp" />
     <ClInclude Include="..\Source\VkToolbox\GlslShader.hpp" />
     <ClInclude Include="..\Source\VkToolbox\Hashing.hpp" />
+    <ClInclude Include="..\Source\VkToolbox\Image.hpp" />
     <ClInclude Include="..\Source\VkToolbox\Log.hpp" />
     <ClInclude Include="..\Source\VkToolbox\OSWindow.hpp" />
     <ClInclude Include="..\Source\VkToolbox\Pool.hpp" />

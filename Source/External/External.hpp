@@ -17,14 +17,14 @@
 #endif // _MSC_VER && !_HAS_EXCEPTIONS
 
 // ========================================================
-#include "enum_helpers/enum_helpers.hpp"
+#define ARRAY_VIEW_USE_ASSERTS 1
+#include "array_view/array_view.hpp"
 // ========================================================
 #include "hash_index/hash_index.hpp"
+// ========================================================
+#include "enum_helpers/enum_helpers.hpp"
 // ========================================================
 #include "vectormath/vectormath.hpp"
 // ========================================================
 #include "str/str.hpp"
-// ========================================================
-#define ARRAY_VIEW_USE_ASSERTS 1
-#include "array_view/array_view.hpp"
 // ========================================================

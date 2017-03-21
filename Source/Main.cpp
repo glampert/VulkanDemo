@@ -26,6 +26,7 @@ Vk demo idea 3:
 
 #include "VkToolbox/Log.hpp"
 #include "VkToolbox/OSWindow.hpp"
+#include "VkToolbox/Image.hpp"
 #include "VkToolbox/ResourceManager.hpp"
 #include "VkToolbox/VulkanContext.hpp"
 
@@ -76,6 +77,30 @@ int main()
         GlslShader::shutdownClass();
     }
     */
+
+    // Test Image:
+    {
+        //Image::sm_loadOptions.forceRGBA = true;
+        //Image::sm_loadOptions.flipVerticallyOnLoad = true;
+        //Image::sm_loadOptions.roundDownToPowerOfTwo = true;
+        //Image::sm_loadOptions.roundUpToPowerOfTwo = true;
+
+        Image img0{ "cppreference.jpg" };
+        img0.generateMipmapSurfaces();
+        img0.writeAllSurfacesToFiles("img0", "png");
+
+        Image img1{{32,32}, Color32{0,0,255}};
+        img1.writeToFile("img1.png");
+
+        Image img2;
+        img2.initWithCheckerPattern({64,64}, 4);
+        img2.writeToFile("img2.png");
+
+        Image img3;
+        img3.initWithCheckerPattern({256,256}, 4);
+        img3.generateMipmapSurfaces();
+        img3.writeAllSurfacesToFiles("img3", "png");
+    }
 
     window.runEventLoop();
 }

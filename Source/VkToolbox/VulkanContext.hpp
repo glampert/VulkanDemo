@@ -37,7 +37,7 @@ public:
     static const char *   sm_appName;
     static std::uint32_t  sm_appVersion;
     static std::uint32_t  sm_multiSampleCount;
-    static VkFormat       sm_depthFormat;
+    static VkFormat       sm_depthBufferFormat;
     static ValidationMode sm_validationMode;
 
     // Initialization.

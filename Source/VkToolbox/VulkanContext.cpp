@@ -30,10 +30,10 @@ namespace VkToolbox
 // VulkanContext statics:
 // ========================================================
 
-const char *  VulkanContext::sm_appName          = "VulkanApp";
-std::uint32_t VulkanContext::sm_appVersion       = 1;
-std::uint32_t VulkanContext::sm_multiSampleCount = VK_SAMPLE_COUNT_1_BIT;
-VkFormat      VulkanContext::sm_depthFormat      = VK_FORMAT_D24_UNORM_S8_UINT;
+const char *  VulkanContext::sm_appName           = "VulkanApp";
+std::uint32_t VulkanContext::sm_appVersion        = 1;
+std::uint32_t VulkanContext::sm_multiSampleCount  = VK_SAMPLE_COUNT_1_BIT;
+VkFormat      VulkanContext::sm_depthBufferFormat = VK_FORMAT_D24_UNORM_S8_UINT;
 
 #if DEBUG
 VulkanContext::ValidationMode VulkanContext::sm_validationMode = VulkanContext::Debug;
@@ -582,7 +582,7 @@ void VulkanContext::initDepthBuffer()
     VkImageCreateInfo imageCreateInfo = {};
 
     VkFormatProperties props = {};
-    vkGetPhysicalDeviceFormatProperties(m_gpuPhysDevice, sm_depthFormat, &props);
+    vkGetPhysicalDeviceFormatProperties(m_gpuPhysDevice, sm_depthBufferFormat, &props);
 
     if (props.linearTilingFeatures & VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT)
     {
@@ -595,15 +595,15 @@ void VulkanContext::initDepthBuffer()
     else
     {
         // Try other depth formats?
-        Log::fatalF("Depth format %s not supported!", vkFormatToString(sm_depthFormat));
+        Log::fatalF("Depth format %s not supported!", vkFormatToString(sm_depthBufferFormat));
     }
 
-    Log::debugF("DepthBufferFormat=%s", vkFormatToString(sm_depthFormat));
+    Log::debugF("DepthBufferFormat=%s", vkFormatToString(sm_depthBufferFormat));
 
     imageCreateInfo.sType                    = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
     imageCreateInfo.pNext                    = nullptr;
     imageCreateInfo.imageType                = VK_IMAGE_TYPE_2D;
-    imageCreateInfo.format                   = sm_depthFormat;
+    imageCreateInfo.format                   = sm_depthBufferFormat;
     imageCreateInfo.extent.width             = m_framebufferSize.width;
     imageCreateInfo.extent.height            = m_framebufferSize.height;
     imageCreateInfo.extent.depth             = 1;
@@ -625,7 +625,7 @@ void VulkanContext::initDepthBuffer()
     viewInfo.sType                           = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
     viewInfo.pNext                           = nullptr;
     viewInfo.image                           = VK_NULL_HANDLE;
-    viewInfo.format                          = sm_depthFormat;
+    viewInfo.format                          = sm_depthBufferFormat;
     viewInfo.components.r                    = VK_COMPONENT_SWIZZLE_R;
     viewInfo.components.g                    = VK_COMPONENT_SWIZZLE_G;
     viewInfo.components.b                    = VK_COMPONENT_SWIZZLE_B;
@@ -638,9 +638,9 @@ void VulkanContext::initDepthBuffer()
     viewInfo.viewType                        = VK_IMAGE_VIEW_TYPE_2D;
     viewInfo.flags                           = 0;
 
-    if (sm_depthFormat == VK_FORMAT_D16_UNORM_S8_UINT ||
-        sm_depthFormat == VK_FORMAT_D24_UNORM_S8_UINT ||
-        sm_depthFormat == VK_FORMAT_D32_SFLOAT_S8_UINT)
+    if (sm_depthBufferFormat == VK_FORMAT_D16_UNORM_S8_UINT ||
+        sm_depthBufferFormat == VK_FORMAT_D24_UNORM_S8_UINT ||
+        sm_depthBufferFormat == VK_FORMAT_D32_SFLOAT_S8_UINT)
     {
         viewInfo.subresourceRange.aspectMask |= VK_IMAGE_ASPECT_STENCIL_BIT;
     }
@@ -764,7 +764,7 @@ void VulkanContext::initRenderPass()
     attachments[0].flags                 = 0;
 
     // depth
-    attachments[1].format                = sm_depthFormat;
+    attachments[1].format                = sm_depthBufferFormat;
     attachments[1].samples               = VkSampleCountFlagBits(sm_multiSampleCount);
     attachments[1].loadOp                = VK_ATTACHMENT_LOAD_OP_CLEAR;
     attachments[1].storeOp               = VK_ATTACHMENT_STORE_OP_STORE;

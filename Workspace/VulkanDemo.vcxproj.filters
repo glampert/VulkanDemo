@@ -52,6 +52,9 @@
     <ClCompile Include="..\Source\VkToolbox\Utils.cpp">
       <Filter>Source Files\VkToolbox</Filter>
     </ClCompile>
+    <ClCompile Include="..\Source\VkToolbox\Image.cpp">
+      <Filter>Source Files\VkToolbox</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\Source\VkToolbox\Resource.hpp">
@@ -112,6 +115,18 @@
       <Filter>Source Files\External\Libs</Filter>
     </ClInclude>
     <ClInclude Include="..\Source\VkToolbox\FixedSizeArray.hpp">
+      <Filter>Source Files\VkToolbox</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Source\External\stb\stb_image.h">
+      <Filter>Source Files\External\Libs</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Source\External\stb\stb_image_resize.h">
+      <Filter>Source Files\External\Libs</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Source\External\stb\stb_image_write.h">
+      <Filter>Source Files\External\Libs</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Source\VkToolbox\Image.hpp">
       <Filter>Source Files\VkToolbox</Filter>
     </ClInclude>
   </ItemGroup>
