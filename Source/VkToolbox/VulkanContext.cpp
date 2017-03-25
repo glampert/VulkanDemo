@@ -15,6 +15,7 @@
 
 #include "VulkanContext.hpp"
 #include "OSWindow.hpp"
+#include "Texture.hpp"
 
 // For Win32SurfaceKH extension stuff.
 #if defined(WIN32) || defined(WIN64)
@@ -45,32 +46,17 @@ VulkanContext::ValidationMode VulkanContext::sm_validationMode = VulkanContext::
 // class VulkanContext:
 // ========================================================
 
-VulkanContext::VulkanContext(WeakRef<const OSWindow> window, Size2D fbSize, WeakRef<const VkAllocationCallbacks> allocCbs)
-    : m_instance{ VK_NULL_HANDLE }
+VulkanContext::VulkanContext(WeakRef<const OSWindow> window, Size2D fbSize, WeakRef<const VkAllocationCallbacks> allocCBs)
+    : m_allocationCallbacks{ allocCBs }
     , m_renderWindow{ window }
-    , m_allocationCallbacks{ allocCbs }
-    , m_renderSurface{ VK_NULL_HANDLE }
-    , m_renderSurfaceFormat{ VK_FORMAT_UNDEFINED }
-    , m_framebufferSize{ fbSize }
-    , m_swapChainCount{ 0 }
-    , m_swapChain{ VK_NULL_HANDLE }
-    , m_renderPass{ VK_NULL_HANDLE }
-    , m_cmdPool{ VK_NULL_HANDLE }
-    , m_cmdBuffer{ VK_NULL_HANDLE }
-    , m_cmdBufferRecordingState{ false }
-    , m_cmdBufferExecuteState{ false }
-    , m_device{ VK_NULL_HANDLE }
-    , m_gpuPhysDevice{ VK_NULL_HANDLE }
-    , m_gpuQueueFamilyCount{ 0 }
-    , m_gpuPresentQueueFamilyIndex{ -1 }
-    , m_gpuGraphicsQueueFamilyIndex{ -1 }
-    , m_gpuPresentQueue{ VK_NULL_HANDLE }
-    , m_gpuGraphicsQueue{ VK_NULL_HANDLE }
-    , m_gpuFeatures{}
-    , m_gpuProperties{}
-    , m_gpuMemoryProperties{}
+    , m_mainRenderPass{ this }
+    , m_mainCmdPool{ this }
+    , m_mainCmdBuffer{ this }
+    , m_mainFenceCache{ new FenceCache{ this } }
 {
     Log::debugF("Initializing Vulkan API context...");
+
+    m_swapChainState.framebufferSize = fbSize;
 
     initInstanceLayerProperties();
     initInstance();
@@ -83,6 +69,22 @@ VulkanContext::VulkanContext(WeakRef<const OSWindow> window, Size2D fbSize, Weak
     initRenderPass();
     initFramebuffers();
 
+    m_mainCmdBuffer.endRecording();
+    {
+        AutoFence fence{ m_mainFenceCache.get() };
+        m_mainCmdBuffer.submit(m_gpuGraphicsQueue.queue, fence.getVkFenceHandle());
+    }
+
+    for (auto k : m_imgFormatProps.keys())
+    {
+        if (k == Image::Format::None)
+        {
+            m_imgFormatProps[k] = {};
+            continue;
+        }
+        vkGetPhysicalDeviceFormatProperties(m_gpuPhysDevice, Texture::getVkFormat(k), &m_imgFormatProps[k]);
+    }
+
     Log::debugF("VulkanContext initialized successfully!");
 }
 
@@ -94,21 +96,15 @@ VulkanContext::~VulkanContext()
     destroyFramebuffers();
     destroyDepthBuffer();
 
-    if (m_renderPass != VK_NULL_HANDLE)
+    // Have to explicitly shutdown because they depend on the device, destroyed below.
+    m_mainRenderPass.shutdown();
+    m_mainCmdBuffer.shutdown();
+    m_mainCmdPool.shutdown();
+    m_mainFenceCache->shutdown();
+
+    if (m_swapChainState.swapChain != VK_NULL_HANDLE)
     {
-        vkDestroyRenderPass(m_device, m_renderPass, m_allocationCallbacks);
-    }
-    if (m_cmdBuffer != VK_NULL_HANDLE)
-    {
-        vkFreeCommandBuffers(m_device, m_cmdPool, 1, &m_cmdBuffer);
-    }
-    if (m_cmdPool != VK_NULL_HANDLE)
-    {
-        vkDestroyCommandPool(m_device, m_cmdPool, m_allocationCallbacks);
-    }
-    if (m_swapChain != VK_NULL_HANDLE)
-    {
-        vkDestroySwapchainKHR(m_device, m_swapChain, m_allocationCallbacks);
+        vkDestroySwapchainKHR(m_device, m_swapChainState.swapChain, m_allocationCallbacks);
     }
     if (m_device != VK_NULL_HANDLE)
     {
@@ -252,7 +248,7 @@ void VulkanContext::initDevice()
     queueCreateInfo.pNext                      = nullptr;
     queueCreateInfo.queueCount                 = 1;
     queueCreateInfo.pQueuePriorities           = queuePriorities;
-    queueCreateInfo.queueFamilyIndex           = m_gpuGraphicsQueueFamilyIndex;
+    queueCreateInfo.queueFamilyIndex           = m_gpuGraphicsQueue.familyIndex;
 
     deviceCreateInfo.sType                     = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
     deviceCreateInfo.pNext                     = nullptr;
@@ -268,18 +264,18 @@ void VulkanContext::initDevice()
     Log::debugF("VK Device created for GPU 0!");
 
     // Get the GPU queue handles:
-    vkGetDeviceQueue(m_device, m_gpuGraphicsQueueFamilyIndex, 0, &m_gpuGraphicsQueue);
-    assert(m_gpuGraphicsQueue != VK_NULL_HANDLE);
+    vkGetDeviceQueue(m_device, m_gpuGraphicsQueue.familyIndex, 0, &m_gpuGraphicsQueue.queue);
+    assert(m_gpuGraphicsQueue.queue != VK_NULL_HANDLE);
 
-    if (m_gpuGraphicsQueueFamilyIndex == m_gpuPresentQueueFamilyIndex)
+    if (m_gpuGraphicsQueue.familyIndex == m_gpuPresentQueue.familyIndex)
     {
-        m_gpuPresentQueue = m_gpuGraphicsQueue;
+        m_gpuPresentQueue.queue = m_gpuGraphicsQueue.queue;
         Log::debugF("Graphics and present queues are the same.");
     }
     else
     {
-        vkGetDeviceQueue(m_device, m_gpuPresentQueueFamilyIndex, 0, &m_gpuPresentQueue);
-        assert(m_gpuPresentQueue != VK_NULL_HANDLE);
+        vkGetDeviceQueue(m_device, m_gpuPresentQueue.familyIndex, 0, &m_gpuPresentQueue.queue);
+        assert(m_gpuPresentQueue.queue != VK_NULL_HANDLE);
     }
 }
 
@@ -308,14 +304,14 @@ void VulkanContext::initEnumerateGpus()
     assert(queueFamilyCount >= 1);
 
     // This is as good a place as any to do this:
-    vkGetPhysicalDeviceFeatures(gpus[0], &m_gpuFeatures);
-    vkGetPhysicalDeviceProperties(gpus[0], &m_gpuProperties);
-    vkGetPhysicalDeviceMemoryProperties(gpus[0], &m_gpuMemoryProperties);
+    vkGetPhysicalDeviceFeatures(gpus[0], &m_gpuInfo.features);
+    vkGetPhysicalDeviceProperties(gpus[0], &m_gpuInfo.properties);
+    vkGetPhysicalDeviceMemoryProperties(gpus[0], &m_gpuInfo.memoryProperties);
 
     // Minimal debug printing:
     Log::debugF("Found %i physical GPUs", gpuCount);
     Log::debugF("GPU 0 has %i queues", queueFamilyCount);
-    Log::debugF("GPU 0 name: %s", m_gpuProperties.deviceName);
+    Log::debugF("GPU 0 name: %s", m_gpuInfo.properties.deviceName);
 
     m_gpuPhysDevice = gpus[0];
     m_gpuQueueFamilyCount = queueFamilyCount;
@@ -341,8 +337,9 @@ void VulkanContext::initSwapChainExtensions()
     std::vector<VkBool32> queuesSupportingPresent(m_gpuQueueFamilyCount, VK_FALSE);
     for (std::uint32_t q = 0; q < m_gpuQueueFamilyCount; ++q)
     {
-        VKTB_CHECK(vkGetPhysicalDeviceSurfaceSupportKHR(m_gpuPhysDevice, q, 
-                        m_renderSurface, &queuesSupportingPresent[q]));
+        VKTB_CHECK(vkGetPhysicalDeviceSurfaceSupportKHR(m_gpuPhysDevice, q,
+                                                        m_renderSurface,
+                                                        &queuesSupportingPresent[q]));
     }
 
     // Search for a graphics and a present queue in the array of queue
@@ -351,15 +348,15 @@ void VulkanContext::initSwapChainExtensions()
     {
         if ((m_gpuQueueProperties[q].queueFlags & VK_QUEUE_GRAPHICS_BIT) != 0)
         {
-            if (m_gpuGraphicsQueueFamilyIndex == -1)
+            if (m_gpuGraphicsQueue.familyIndex == -1)
             {
-                m_gpuGraphicsQueueFamilyIndex = static_cast<std::int32_t>(q);
+                m_gpuGraphicsQueue.familyIndex = static_cast<std::int32_t>(q);
             }
 
             if (queuesSupportingPresent[q] == VK_TRUE)
             {
-                m_gpuPresentQueueFamilyIndex  = static_cast<std::int32_t>(q);
-                m_gpuGraphicsQueueFamilyIndex = static_cast<std::int32_t>(q);
+                m_gpuPresentQueue.familyIndex  = static_cast<std::int32_t>(q);
+                m_gpuGraphicsQueue.familyIndex = static_cast<std::int32_t>(q);
                 break;
             }
         }
@@ -367,20 +364,20 @@ void VulkanContext::initSwapChainExtensions()
 
     // If didn't find a queue that supports both graphics and present,
     // then find a separate present queue.
-    if (m_gpuPresentQueueFamilyIndex == -1)
+    if (m_gpuPresentQueue.familyIndex == -1)
     {
         for (std::uint32_t q = 0; q < m_gpuQueueFamilyCount; ++q)
         {
             if (queuesSupportingPresent[q] == VK_TRUE)
             {
-                m_gpuPresentQueueFamilyIndex = static_cast<std::int32_t>(q);
+                m_gpuPresentQueue.familyIndex = static_cast<std::int32_t>(q);
                 break;
             }
         }
     }
 
     // Error if could not find queues that support graphics and present.
-    if (m_gpuPresentQueueFamilyIndex == -1 || m_gpuGraphicsQueueFamilyIndex == -1)
+    if (m_gpuPresentQueue.familyIndex == -1 || m_gpuGraphicsQueue.familyIndex == -1)
     {
         Log::fatalF("Could not find a VK queue for both graphics and present!");
     }
@@ -396,8 +393,8 @@ void VulkanContext::initSwapChainExtensions()
 
     if (isDebug())
     {
-        Log::debugF("GPU 0 Present Queue family index:  %i", m_gpuPresentQueueFamilyIndex);
-        Log::debugF("GPU 0 Graphics Queue family index: %i", m_gpuGraphicsQueueFamilyIndex);
+        Log::debugF("GPU 0 Present Queue family index:  %i", m_gpuPresentQueue.familyIndex);
+        Log::debugF("GPU 0 Graphics Queue family index: %i", m_gpuGraphicsQueue.familyIndex);
 
         Log::debugF("------ VK render surface formats supported ------");
         for (std::uint32_t f = 0; f < formatCount; ++f)
@@ -443,11 +440,14 @@ void VulkanContext::initSwapChain()
     {
         // If the surface size is undefined, size is set to the
         // the window size, but clamped to min/max extents supported.
-        swapChainExtent.width  = m_framebufferSize.width;
-        swapChainExtent.height = m_framebufferSize.height;
+        swapChainExtent.width  = m_swapChainState.framebufferSize.width;
+        swapChainExtent.height = m_swapChainState.framebufferSize.height;
 
         clamp(&swapChainExtent.width,  surfCapabilities.minImageExtent.width,  surfCapabilities.maxImageExtent.width);
         clamp(&swapChainExtent.height, surfCapabilities.minImageExtent.height, surfCapabilities.maxImageExtent.height);
+
+        m_swapChainState.framebufferSize.width  = swapChainExtent.width;
+        m_swapChainState.framebufferSize.height = swapChainExtent.height;
     }
     else
     {
@@ -523,11 +523,11 @@ void VulkanContext::initSwapChain()
     swapChainCreateInfo.pQueueFamilyIndices      = nullptr;
 
     const std::uint32_t queueFamilyIndices[] = {
-        static_cast<std::uint32_t>(m_gpuGraphicsQueueFamilyIndex),
-        static_cast<std::uint32_t>(m_gpuPresentQueueFamilyIndex)
+        static_cast<std::uint32_t>(m_gpuGraphicsQueue.familyIndex),
+        static_cast<std::uint32_t>(m_gpuPresentQueue.familyIndex)
     };
 
-    if (m_gpuGraphicsQueueFamilyIndex != m_gpuPresentQueueFamilyIndex)
+    if (m_gpuGraphicsQueue.familyIndex != m_gpuPresentQueue.familyIndex)
     {
         // If the graphics and present queues are from different queue families,
         // we either have to explicitly transfer ownership of images between the
@@ -538,18 +538,22 @@ void VulkanContext::initSwapChain()
         swapChainCreateInfo.pQueueFamilyIndices   = queueFamilyIndices;
     }
 
-    VKTB_CHECK(vkCreateSwapchainKHR(m_device, &swapChainCreateInfo, m_allocationCallbacks, &m_swapChain));
-    assert(m_swapChain != VK_NULL_HANDLE);
+    VKTB_CHECK(vkCreateSwapchainKHR(m_device, &swapChainCreateInfo,
+                                    m_allocationCallbacks, &m_swapChainState.swapChain));
+    assert(m_swapChainState.swapChain != VK_NULL_HANDLE);
 
-    VKTB_CHECK(vkGetSwapchainImagesKHR(m_device, m_swapChain, &m_swapChainCount, nullptr));
-    assert(m_swapChainCount >= 1);
+    VKTB_CHECK(vkGetSwapchainImagesKHR(m_device, m_swapChainState.swapChain,
+                                       &m_swapChainState.swapChainBufferCount, nullptr));
+    assert(m_swapChainState.swapChainBufferCount >= 1);
 
-    std::vector<VkImage> swapChainImages(m_swapChainCount, VK_NULL_HANDLE);
-    VKTB_CHECK(vkGetSwapchainImagesKHR(m_device, m_swapChain, &m_swapChainCount, swapChainImages.data()));
-    assert(m_swapChainCount >= 1);
+    std::vector<VkImage> swapChainImages(m_swapChainState.swapChainBufferCount, VK_NULL_HANDLE);
+    VKTB_CHECK(vkGetSwapchainImagesKHR(m_device, m_swapChainState.swapChain,
+                                       &m_swapChainState.swapChainBufferCount,
+                                       swapChainImages.data()));
+    assert(m_swapChainState.swapChainBufferCount >= 1);
 
-    m_swapChainBuffers.reserve(m_swapChainCount);
-    for (std::uint32_t i = 0; i < m_swapChainCount; ++i)
+    m_swapChainState.swapChainBuffers.reserve(m_swapChainState.swapChainBufferCount);
+    for (std::uint32_t i = 0; i < m_swapChainState.swapChainBufferCount; ++i)
     {
         VkImageViewCreateInfo imgViewCreateInfo           = {};
         imgViewCreateInfo.sType                           = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
@@ -571,10 +575,10 @@ void VulkanContext::initSwapChain()
         SwapChainBuffer scBuffer = {};
         scBuffer.image = swapChainImages[i];
         VKTB_CHECK(vkCreateImageView(m_device, &imgViewCreateInfo, m_allocationCallbacks, &scBuffer.view));
-        m_swapChainBuffers.push_back(scBuffer);
+        m_swapChainState.swapChainBuffers.push_back(scBuffer);
     }
 
-    Log::debugF("Swap-chain created with %u image buffers.", m_swapChainCount);
+    Log::debugF("Swap-chain created with %u image buffers.", m_swapChainState.swapChainBufferCount);
 }
 
 void VulkanContext::initDepthBuffer()
@@ -604,12 +608,12 @@ void VulkanContext::initDepthBuffer()
     imageCreateInfo.pNext                    = nullptr;
     imageCreateInfo.imageType                = VK_IMAGE_TYPE_2D;
     imageCreateInfo.format                   = sm_depthBufferFormat;
-    imageCreateInfo.extent.width             = m_framebufferSize.width;
-    imageCreateInfo.extent.height            = m_framebufferSize.height;
+    imageCreateInfo.extent.width             = m_swapChainState.framebufferSize.width;
+    imageCreateInfo.extent.height            = m_swapChainState.framebufferSize.height;
     imageCreateInfo.extent.depth             = 1;
     imageCreateInfo.mipLevels                = 1;
     imageCreateInfo.arrayLayers              = 1;
-    imageCreateInfo.samples                  = static_cast<VkSampleCountFlagBits>(sm_multiSampleCount);
+    imageCreateInfo.samples                  = VkSampleCountFlagBits(sm_multiSampleCount);
     imageCreateInfo.initialLayout            = VK_IMAGE_LAYOUT_UNDEFINED;
     imageCreateInfo.queueFamilyIndexCount    = 0;
     imageCreateInfo.pQueueFamilyIndices      = nullptr;
@@ -652,7 +656,7 @@ void VulkanContext::initDepthBuffer()
     memAllocInfo.allocationSize = memReqs.size;
 
     // Use the memory properties to determine the type of memory required:
-    memAllocInfo.memoryTypeIndex = memoryTypeFromProperties(memReqs.memoryTypeBits, /* requirementsMask = */ 0);
+    memAllocInfo.memoryTypeIndex = getMemoryTypeFromProperties(memReqs.memoryTypeBits, /* requirementsMask = */ 0);
     assert(memAllocInfo.memoryTypeIndex < UINT32_MAX);
 
     // Allocate the memory:
@@ -663,7 +667,7 @@ void VulkanContext::initDepthBuffer()
     VKTB_CHECK(vkBindImageMemory(m_device, m_depthBuffer.image, m_depthBuffer.memory, 0));
 
     // Set the image layout to depth stencil optimal:
-    setImageLayout(m_depthBuffer.image, viewInfo.subresourceRange.aspectMask,
+    setImageLayout(m_mainCmdBuffer.getVkCmdBufferHandle(), m_depthBuffer.image, viewInfo.subresourceRange.aspectMask,
                    VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
 
     // And finally create the image view.
@@ -696,7 +700,7 @@ void VulkanContext::destroyDepthBuffer()
 void VulkanContext::initFramebuffers()
 {
     assert(m_depthBuffer.view != VK_NULL_HANDLE); // Depth buffer created first,
-    assert(m_renderPass       != VK_NULL_HANDLE); // and render pass also needed
+    assert(m_mainRenderPass.isInitialized());     // and render pass also needed
 
     VkImageView attachments[2];
     attachments[1] = m_depthBuffer.view;
@@ -704,18 +708,19 @@ void VulkanContext::initFramebuffers()
     VkFramebufferCreateInfo fbCreateInfo = {};
     fbCreateInfo.sType                   = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
     fbCreateInfo.pNext                   = nullptr;
-    fbCreateInfo.renderPass              = m_renderPass;
+    fbCreateInfo.renderPass              = m_mainRenderPass.getVkRenderPassHandle();
     fbCreateInfo.attachmentCount         = static_cast<std::uint32_t>(arrayLength(attachments)); // Include the depth buffer
     fbCreateInfo.pAttachments            = attachments;
-    fbCreateInfo.width                   = m_framebufferSize.width;
-    fbCreateInfo.height                  = m_framebufferSize.height;
+    fbCreateInfo.width                   = m_swapChainState.framebufferSize.width;
+    fbCreateInfo.height                  = m_swapChainState.framebufferSize.height;
     fbCreateInfo.layers                  = 1;
 
-    for (std::uint32_t i = 0; i < m_swapChainCount; ++i)
+    for (std::uint32_t i = 0; i < m_swapChainState.swapChainBufferCount; ++i)
     {
-        attachments[0] = m_swapChainBuffers[i].view;
-        VKTB_CHECK(vkCreateFramebuffer(m_device, &fbCreateInfo, m_allocationCallbacks, &m_swapChainBuffers[i].framebuffer));
-        assert(m_swapChainBuffers[i].framebuffer != VK_NULL_HANDLE);
+        attachments[0] = m_swapChainState.swapChainBuffers[i].view;
+        VKTB_CHECK(vkCreateFramebuffer(m_device, &fbCreateInfo, m_allocationCallbacks,
+                                       &m_swapChainState.swapChainBuffers[i].framebuffer));
+        assert(m_swapChainState.swapChainBuffers[i].framebuffer != VK_NULL_HANDLE);
     }
 
     Log::debugF("Framebuffer initialized.");
@@ -725,7 +730,7 @@ void VulkanContext::destroyFramebuffers()
 {
     // Clean up the swap-chain image views and FBs.
     // The swap-chain images themselves are owned by the swap-chain.
-    for (SwapChainBuffer & scBuffer : m_swapChainBuffers)
+    for (SwapChainBuffer & scBuffer : m_swapChainState.swapChainBuffers)
     {
         if (scBuffer.view != VK_NULL_HANDLE)
         {
@@ -736,7 +741,7 @@ void VulkanContext::destroyFramebuffers()
             vkDestroyFramebuffer(m_device, scBuffer.framebuffer, m_allocationCallbacks);
         }
     }
-    m_swapChainBuffers.clear();
+    m_swapChainState.swapChainBuffers.clear();
 }
 
 void VulkanContext::initRenderPass()
@@ -796,63 +801,38 @@ void VulkanContext::initRenderPass()
     rpCreateInfo.dependencyCount         = 0;
     rpCreateInfo.pDependencies           = nullptr;
 
-    VKTB_CHECK(vkCreateRenderPass(m_device, &rpCreateInfo, m_allocationCallbacks, &m_renderPass));
-    assert(m_renderPass != VK_NULL_HANDLE);
+    m_mainRenderPass.initialize(rpCreateInfo);
 
-    Log::debugF("Default render-pass initialized.");
+    Log::debugF("Main render-pass initialized.");
 }
 
 void VulkanContext::initCommandPoolAndBuffer()
 {
     // Command pool:
-    {
-        VkCommandPoolCreateInfo cpCreateInfo = {};
-        cpCreateInfo.sType                   = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
-        cpCreateInfo.pNext                   = nullptr;
-        cpCreateInfo.queueFamilyIndex        = m_gpuGraphicsQueueFamilyIndex;
-        cpCreateInfo.flags                   = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
-
-        VKTB_CHECK(vkCreateCommandPool(m_device, &cpCreateInfo, m_allocationCallbacks, &m_cmdPool));
-        assert(m_cmdPool != VK_NULL_HANDLE);
-    }
+    m_mainCmdPool.initialize(VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
+                             m_gpuGraphicsQueue.familyIndex);
 
     // Default command buffer:
-    {
-        VkCommandBufferAllocateInfo cmdAllocInfo = {};
-        cmdAllocInfo.sType                       = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-        cmdAllocInfo.pNext                       = nullptr;
-        cmdAllocInfo.commandPool                 = m_cmdPool;
-        cmdAllocInfo.level                       = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-        cmdAllocInfo.commandBufferCount          = 1;
+    m_mainCmdBuffer.initialize(VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+                               m_mainCmdPool.getVkCmdPoolHandle());
 
-        VKTB_CHECK(vkAllocateCommandBuffers(m_device, &cmdAllocInfo, &m_cmdBuffer));
-        assert(m_cmdBuffer != VK_NULL_HANDLE);
+    // Put the default buffer in a state ready to receive commands.
+    // Must call vkEndCommandBuffer on it later on to be able to submit.
+    m_mainCmdBuffer.beginRecording();
 
-        // Put the default buffer in a state ready to receive commands.
-        // Must call vkEndCommandBuffer on it later on to be able to submit.
-        VkCommandBufferBeginInfo cmdBufBeginInfo = {};
-        cmdBufBeginInfo.sType                    = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-        cmdBufBeginInfo.pNext                    = nullptr;
-        cmdBufBeginInfo.flags                    = 0;
-        cmdBufBeginInfo.pInheritanceInfo         = nullptr;
-
-        VKTB_CHECK(vkBeginCommandBuffer(m_cmdBuffer, &cmdBufBeginInfo));
-        m_cmdBufferRecordingState = true;
-        m_cmdBufferExecuteState   = false;
-    }
-
-    Log::debugF("Default command pool and buffer initialized for queue %i.", m_gpuGraphicsQueueFamilyIndex);
+    Log::debugF("Main command pool and buffer initialized for queue %i.",
+                m_gpuGraphicsQueue.familyIndex);
 }
 
-std::uint32_t VulkanContext::memoryTypeFromProperties(std::uint32_t typeBits, VkFlags requirementsMask) const
+std::uint32_t VulkanContext::getMemoryTypeFromProperties(std::uint32_t typeBits, VkFlags requirementsMask) const
 {
     // Search mem types to find first index with those properties
-    for (std::uint32_t i = 0; i < m_gpuMemoryProperties.memoryTypeCount; ++i)
+    for (std::uint32_t i = 0; i < m_gpuInfo.memoryProperties.memoryTypeCount; ++i)
     {
         if ((typeBits & 1) == 1)
         {
             // Type is available, does it match user properties?
-            if ((m_gpuMemoryProperties.memoryTypes[i].propertyFlags & requirementsMask) == requirementsMask)
+            if ((m_gpuInfo.memoryProperties.memoryTypes[i].propertyFlags & requirementsMask) == requirementsMask)
             {
                 return i;
             }
@@ -865,12 +845,11 @@ std::uint32_t VulkanContext::memoryTypeFromProperties(std::uint32_t typeBits, Vk
     return UINT32_MAX;
 }
 
-void VulkanContext::setImageLayout(VkImage image, VkImageAspectFlags aspectMask,
-                                   VkImageLayout oldImageLayout, VkImageLayout newImageLayout)
+void VulkanContext::setImageLayout(VkCommandBuffer cmdBuff, VkImage image, VkImageAspectFlags aspectMask,
+                                   VkImageLayout oldImageLayout, VkImageLayout newImageLayout) const
 {
     assert(image != VK_NULL_HANDLE);
-    assert(m_cmdBuffer != VK_NULL_HANDLE);
-    assert(m_gpuGraphicsQueue != VK_NULL_HANDLE);
+    assert(m_gpuGraphicsQueue.queue != VK_NULL_HANDLE);
 
     VkImageMemoryBarrier imageMemBarrier            = {};
     imageMemBarrier.sType                           = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
@@ -892,44 +871,37 @@ void VulkanContext::setImageLayout(VkImage image, VkImageAspectFlags aspectMask,
     {
         imageMemBarrier.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
     }
-
     if (newImageLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL)
     {
         imageMemBarrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
     }
-
     if (newImageLayout == VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL)
     {
         imageMemBarrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
     }
-
     if (oldImageLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL)
     {
         imageMemBarrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
     }
-
     if (oldImageLayout == VK_IMAGE_LAYOUT_PREINITIALIZED)
     {
         imageMemBarrier.srcAccessMask = VK_ACCESS_HOST_WRITE_BIT;
     }
-
     if (newImageLayout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
     {
         imageMemBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
     }
-
     if (newImageLayout == VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL)
     {
         imageMemBarrier.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
     }
-
     if (newImageLayout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL)
     {
         imageMemBarrier.dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
     }
 
     vkCmdPipelineBarrier(
-        /* commandBuffer            = */ m_cmdBuffer,
+        /* commandBuffer            = */ cmdBuff,
         /* srcStageMask             = */ VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
         /* dstStageMask             = */ VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
         /* dependencyFlags          = */ 0,
@@ -970,6 +942,119 @@ Size2D VulkanContext::getRenderWindowSize() const
 {
     assert(m_renderWindow != nullptr);
     return m_renderWindow->getSize();
+}
+
+// ========================================================
+// class FenceCache:
+// ========================================================
+
+void FenceCache::shutdown()
+{
+    assert(m_allocCount == 0);
+    if (!m_cache.empty())
+    {
+        auto device   = m_vkContext->getVkDeviceHandle();
+        auto allocCBs = m_vkContext->getAllocationCallbacks();
+        for (VkFence fence : m_cache)
+        {
+            vkDestroyFence(device, fence, allocCBs);
+        }
+        m_cache.clear();
+    }
+}
+
+FenceCache::~FenceCache()
+{
+    shutdown();
+}
+
+WeakHandle<VkFence> FenceCache::AllocRecyclableFence()
+{
+    assert(m_allocCount != m_cache.capacity());
+    ++m_allocCount;
+
+    if (m_cache.empty())
+    {
+        VkFenceCreateInfo fenceCreateInfo;
+        fenceCreateInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+        fenceCreateInfo.pNext = nullptr;
+        fenceCreateInfo.flags = 0;
+
+        OwnedHandle<VkFence> newFence;
+        VKTB_CHECK(vkCreateFence(m_vkContext->getVkDeviceHandle(), &fenceCreateInfo,
+                                 m_vkContext->getAllocationCallbacks(), &newFence));
+        assert(newFence != VK_NULL_HANDLE);
+        return newFence;
+    }
+    else
+    {
+        WeakHandle<VkFence> fence = m_cache.back();
+        m_cache.pop();
+
+        // Reset to unsignaled:
+        VKTB_CHECK(vkResetFences(m_vkContext->getVkDeviceHandle(), 1, &fence));
+        return fence;
+    }
+}
+
+void FenceCache::recycleFence(WeakHandle<VkFence> fence)
+{
+    assert(fence != VK_NULL_HANDLE);
+    m_cache.push(fence);
+    --m_allocCount;
+}
+
+// ========================================================
+// class AutoFence:
+// ========================================================
+
+bool AutoFence::wait(const std::uint64_t timeout)
+{
+    assert(isWaitable());
+    assert(m_cache != nullptr);
+
+    const VkResult res = vkWaitForFences(m_cache->getVkContext().getVkDeviceHandle(),
+                                         1, &m_fenceHandle, VK_TRUE, timeout);
+
+    if (res == VK_TIMEOUT)
+    {
+        return false; // Caller can try again with bigger timeout.
+    }
+    else if (res == VK_SUCCESS)
+    {
+        // Done, recycle the fence.
+        m_cache->recycleFence(m_fenceHandle);
+        m_fenceHandle = VK_NULL_HANDLE;
+        return true;
+    }
+    else // Some other internal failure...
+    {
+        Log::fatalF("vkWaitForFences() failed with error (%#x): %s", res, vkResultToString(res));
+    }
+}
+
+bool AutoFence::isSignaled() const
+{
+    if (!isWaitable())
+    {
+        return true;
+    }
+
+    assert(m_cache != nullptr);
+    const VkResult res = vkGetFenceStatus(m_cache->getVkContext().getVkDeviceHandle(), m_fenceHandle);
+
+    if (res == VK_SUCCESS)
+    {
+        return true;
+    }
+    else if (res == VK_NOT_READY)
+    {
+        return false;
+    }
+    else
+    {
+        Log::fatalF("vkGetFenceStatus() failed with error (%#x): %s", res, vkResultToString(res));
+    }
 }
 
 // ========================================================

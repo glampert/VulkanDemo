@@ -425,7 +425,7 @@ void GlslShader::unload()
     // Release the old stage modules if needed:
     if (!m_stages.empty())
     {
-        WeakHandle<VkDevice> device = getVkContext().getDevice();
+        WeakHandle<VkDevice> device = getVkContext().getVkDeviceHandle();
         WeakRef<const VkAllocationCallbacks> allocator = getVkContext().getAllocationCallbacks();
         for (int s = 0; s < m_stages.size(); ++s)
         {
@@ -489,7 +489,7 @@ OwnedHandle<VkShaderModule> GlslShader::createShaderModule(const VulkanContext &
     shaderModuleInfo.pCode    = spirvBinary.data();
 
     VkShaderModule shaderModule = VK_NULL_HANDLE;
-    const VkResult result = vkCreateShaderModule(vkContext.getDevice(), &shaderModuleInfo,
+    const VkResult result = vkCreateShaderModule(vkContext.getVkDeviceHandle(), &shaderModuleInfo,
                                                  vkContext.getAllocationCallbacks(), &shaderModule);
 
     if (result != VK_SUCCESS || shaderModule == VK_NULL_HANDLE)
@@ -624,7 +624,7 @@ bool GlslShader::createShaderStages(const VulkanContext & vkContext,
     // Throw everything away and return false if a shader stage failed.
     if (failedCount != 0)
     {
-        WeakHandle<VkDevice> device = vkContext.getDevice();
+        WeakHandle<VkDevice> device = vkContext.getVkDeviceHandle();
         WeakRef<const VkAllocationCallbacks> allocator = vkContext.getAllocationCallbacks();
 
         for (int s = 0; s < outStages->size(); ++s)

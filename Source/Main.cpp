@@ -52,7 +52,7 @@ int main()
     VulkanContext vkCtx{ &window, { 1024, 768 } };
     vkCtx.logInstanceLayerProperties();
 
-    // Test shader
+    // Test Shader:
     /*
     {
         GlslShader::initClass();
@@ -79,6 +79,7 @@ int main()
     */
 
     // Test Image:
+    /*
     {
         //Image::sm_loadOptions.forceRGBA = true;
         //Image::sm_loadOptions.flipVerticallyOnLoad = true;
@@ -101,6 +102,18 @@ int main()
         img3.generateMipmapSurfaces();
         img3.writeAllSurfacesToFiles("img3", "png");
     }
+    */
+
+    // Test Texture:
+    {
+        std::printf("sizeof(Texture) = %zu", sizeof(Texture));
+    }
+
+    // - render targets/buffers
+    // - index/vertex buffers
+    // - shader uniform buffers
+    // - model loading (assimp?)
+    // - debug draw (bring up dd lib?)
 
     window.runEventLoop();
 }

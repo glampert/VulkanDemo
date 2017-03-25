@@ -79,7 +79,7 @@ protected:
 
 inline bool Resource::isShutdown() const
 {
-    return m_vkContext == nullptr;
+    return (m_vkContext == nullptr);
 }
 
 inline const VulkanContext & Resource::getVkContext() const

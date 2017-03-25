@@ -32,7 +32,7 @@ Image::LoadOptions Image::sm_loadOptions;
 
 // ========================================================
 
-void Image::clear()
+void Image::shutdown()
 {
     m_rawDataBaseSurface    = nullptr;
     m_rawDataMipmapSurfaces = nullptr;
@@ -261,7 +261,7 @@ bool Image::writeAllSurfacesToFiles(const char * const basePathName, const char 
     return errorCount == 0;
 }
 
-// R8 =====================================================
+// R8 pixel access ========================================
 
 static inline void Image_setPixel_R8(ImageSurface & surface, const int pX, const int pY, const std::uint8_t * pixelIn)
 {
@@ -275,7 +275,7 @@ static inline void Image_getPixel_R8(const ImageSurface & surface, const int pX,
     *pixelOut = pixels[pX + (pY * surface.size.width)];
 }
 
-// RG8 ====================================================
+// RG8 pixel access =======================================
 
 static inline void Image_setPixel_RG8(ImageSurface & surface, const int pX, const int pY, const std::uint8_t * pixelIn)
 {
@@ -293,7 +293,7 @@ static inline void Image_getPixel_RG8(const ImageSurface & surface, const int pX
     pixelOut[1] = pixels[(pixelIndex * 2) + 1];
 }
 
-// RGB8 ===================================================
+// RGB8 pixel access ======================================
 
 static inline void Image_setPixel_RGB8(ImageSurface & surface, const int pX, const int pY, const std::uint8_t * pixelIn)
 {
@@ -313,7 +313,7 @@ static inline void Image_getPixel_RGB8(const ImageSurface & surface, const int p
     pixelOut[2] = pixels[(pixelIndex * 3) + 2];
 }
 
-// RGBA8 ==================================================
+// RGBA8 pixel access =====================================
 
 static inline void Image_setPixel_RGBA8(ImageSurface & surface, const int pX, const int pY, const std::uint8_t * pixelIn)
 {
@@ -528,7 +528,7 @@ void Image::flipVCopyBaseSurface(Image & flippedImage) const
     assert(isValid());
     const Size2D size = getSize();
 
-    flippedImage.clear();
+    flippedImage.shutdown();
     flippedImage.initWithSize(size, m_format);
 
     const int maxX = size.width  - 1;
@@ -550,7 +550,7 @@ void Image::flipHCopyBaseSurface(Image & flippedImage) const
     assert(isValid());
     const Size2D size = getSize();
 
-    flippedImage.clear();
+    flippedImage.shutdown();
     flippedImage.initWithSize(size, m_format);
 
     std::uint8_t tempPixel[MaxPixelBytes];
@@ -599,7 +599,7 @@ void Image::resizeCopyBaseSurface(Image & destImage, const int targetWidth, cons
 
     if (destImage.isInitialized())
     {
-        destImage.clear();
+        destImage.shutdown();
     }
     destImage.initWithSize({ targetWidth, targetHeight }, m_format);
 
@@ -691,7 +691,7 @@ void Image::copyBaseSurfaceRect(Image & destImage, const int xOffset, const int 
     {
         if (destImage.isInitialized())
         {
-            destImage.clear();
+            destImage.shutdown();
         }
         destImage.initWithSize({ rectWidth, rectHeight }, m_format);
     }

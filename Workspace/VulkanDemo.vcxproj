@@ -178,11 +178,13 @@
       <Optimization Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Full</Optimization>
       <Optimization Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Full</Optimization>
     </ClCompile>
+    <ClCompile Include="..\Source\VkToolbox\CommandBuffer.cpp" />
     <ClCompile Include="..\Source\VkToolbox\GlslShader.cpp" />
     <ClCompile Include="..\Source\VkToolbox\Hashing.cpp" />
     <ClCompile Include="..\Source\VkToolbox\Image.cpp" />
     <ClCompile Include="..\Source\VkToolbox\Log.cpp" />
     <ClCompile Include="..\Source\VkToolbox\OSWindow.cpp" />
+    <ClCompile Include="..\Source\VkToolbox\RenderPass.cpp" />
     <ClCompile Include="..\Source\VkToolbox\Resource.cpp" />
     <ClCompile Include="..\Source\VkToolbox\ResourceManager.cpp" />
     <ClCompile Include="..\Source\VkToolbox\Texture.cpp" />
@@ -201,6 +203,7 @@
     <ClInclude Include="..\Source\External\stb\stb_image_write.h" />
     <ClInclude Include="..\Source\External\str\str.hpp" />
     <ClInclude Include="..\Source\External\vectormath\vectormath.hpp" />
+    <ClInclude Include="..\Source\VkToolbox\CommandBuffer.hpp" />
     <ClInclude Include="..\Source\VkToolbox\FixedSizeArray.hpp" />
     <ClInclude Include="..\Source\VkToolbox\GlslShader.hpp" />
     <ClInclude Include="..\Source\VkToolbox\Hashing.hpp" />
@@ -208,6 +211,7 @@
     <ClInclude Include="..\Source\VkToolbox\Log.hpp" />
     <ClInclude Include="..\Source\VkToolbox\OSWindow.hpp" />
     <ClInclude Include="..\Source\VkToolbox\Pool.hpp" />
+    <ClInclude Include="..\Source\VkToolbox\RenderPass.hpp" />
     <ClInclude Include="..\Source\VkToolbox\Resource.hpp" />
     <ClInclude Include="..\Source\VkToolbox\ResourceManager.hpp" />
     <ClInclude Include="..\Source\VkToolbox\StringRegistry.hpp" />

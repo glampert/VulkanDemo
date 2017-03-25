@@ -55,6 +55,12 @@
     <ClCompile Include="..\Source\VkToolbox\Image.cpp">
       <Filter>Source Files\VkToolbox</Filter>
     </ClCompile>
+    <ClCompile Include="..\Source\VkToolbox\CommandBuffer.cpp">
+      <Filter>Source Files\VkToolbox</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Source\VkToolbox\RenderPass.cpp">
+      <Filter>Source Files\VkToolbox</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\Source\VkToolbox\Resource.hpp">
@@ -127,6 +133,12 @@
       <Filter>Source Files\External\Libs</Filter>
     </ClInclude>
     <ClInclude Include="..\Source\VkToolbox\Image.hpp">
+      <Filter>Source Files\VkToolbox</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Source\VkToolbox\CommandBuffer.hpp">
+      <Filter>Source Files\VkToolbox</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Source\VkToolbox\RenderPass.hpp">
       <Filter>Source Files\VkToolbox</Filter>
     </ClInclude>
   </ItemGroup>

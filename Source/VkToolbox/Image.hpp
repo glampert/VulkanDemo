@@ -43,6 +43,7 @@ public:
     explicit Color32(const Vector3 & rgb, float a = 1.0f);
 
     // To/from conversion helpers:
+
     std::uint32_t toUInt32() const;
     void fromUInt32(std::uint32_t rgba);
 
@@ -53,6 +54,7 @@ public:
     void fromVector3(const Vector3 & rgb, float a = 1.0f);
 
     // Element accessors:
+
     std::uint8_t byteR() const;
     std::uint8_t byteG() const;
     std::uint8_t byteB() const;
@@ -76,11 +78,22 @@ public:
     void setFloatRGBA(float r, float g, float b, float a);
 
     // Color format conversion helpers:
+
+    // Byte in [0,255] range to float in [0,1] range.
     static float byteToFloat(std::uint8_t b);
+
+    // Float in [0,1] range to byte in [0,255] range. 'f' not clamped!
     static std::uint8_t floatToByte(float f);
 
-    static std::uint32_t packRGBA(std::uint8_t r, std::uint8_t g, std::uint8_t b, std::uint8_t a);
-    static void unpackRGBA(std::uint32_t rgba, std::uint8_t & r, std::uint8_t & g, std::uint8_t & b, std::uint8_t & a);
+    // Pack each byte into an integer:
+    // 0x00-00-00-00
+    //   aa-bb-gg-rr
+    static std::uint32_t packRGBA(std::uint8_t r, std::uint8_t g,
+                                  std::uint8_t b, std::uint8_t a);
+
+    // Undo the work of packRGBA.
+    static void unpackRGBA(std::uint32_t rgba, std::uint8_t & r,
+                           std::uint8_t & g, std::uint8_t & b, std::uint8_t & a);
 
 private:
 
@@ -135,6 +148,9 @@ struct ImageSurface final
 // class Image:
 // ========================================================
 
+// Image loaded from a file (with the help of STB image).
+// Not directly related to a VkImage - The Texture class
+// handles the GPU/VK glue instead.
 class Image final
 {
 public:
@@ -214,7 +230,7 @@ public:
           ImageSurface & getSurface(int surface);
 
     // Frees all memory and resets the object to initial states (an invalid image).
-    void clear();
+    void shutdown();
 
     // Allocate uninitialized memory for the image. Single surface.
     void initWithSize(Size2D size, Format format);
@@ -267,7 +283,7 @@ public:
     template<typename Func> void forEveryPixel(Func && fn, int surface = 0) const;
     template<typename Func> void forEveryPixel(Func && fn, int surface = 0);
 
-    // Generates a set of mipmap surface from the base surface (surface=0).
+    // Generates a set of mipmap surfaces from the base surface (surface=0).
     // This will fail if the image is invalid (e.g. has no surfaces).
     // Uses an implementation defined filter. Might allocate some memory.
     void generateMipmapSurfaces();
@@ -372,7 +388,7 @@ inline Image::Image(Image && other)
     , m_format{ other.m_format }
     , m_surfaces{ std::move(other.m_surfaces) }
 {
-    other.clear();
+    other.shutdown();
 }
 
 inline Image & Image::operator = (Image && other)
@@ -383,7 +399,7 @@ inline Image & Image::operator = (Image && other)
     m_format                = other.m_format;
     m_surfaces              = std::move(other.m_surfaces);
 
-    other.clear();
+    other.shutdown();
     return *this;
 }
 
@@ -480,7 +496,8 @@ inline void Image::byteFill(const std::uint8_t fillWith, const int surface)
     assert(isValid());
 
     ImageSurface & imgSurf = getSurface(surface);
-    const int pixelCount   = imgSurf.getPixelCount();
+    const int pixelCount = imgSurf.getPixelCount();
+
     std::memset(imgSurf.rawData, fillWith, pixelCount * getBytesPerPixel());
 }
 
@@ -679,29 +696,23 @@ inline void Color32::setFloatRGBA(const float r, const float g,
 
 inline float Color32::byteToFloat(const std::uint8_t b)
 {
-    // Byte in [0,255] range to float in [0,1] range.
     return static_cast<float>(b) * (1.0f / 255.0f);
 }
 
 inline std::uint8_t Color32::floatToByte(const float f)
 {
-    // Float in [0,1] range to byte in [0,255] range. 'f' not clamped!
     return static_cast<std::uint8_t>(f * 255.0f);
 }
 
 inline std::uint32_t Color32::packRGBA(const std::uint8_t r, const std::uint8_t g,
                                        const std::uint8_t b, const std::uint8_t a)
 {
-    // Pack each byte into an integer
-    // 0x00-00-00-00
-    //   aa-bb-gg-rr
     return static_cast<std::uint32_t>((a << 24) | (b << 16) | (g << 8) | r);
 }
 
 inline void Color32::unpackRGBA(const std::uint32_t rgba, std::uint8_t & r,
                                 std::uint8_t & g, std::uint8_t & b, std::uint8_t & a)
 {
-    // Undo the work of packRGBA
     r = static_cast<std::uint8_t>((rgba & 0x000000FF) >> 0);
     g = static_cast<std::uint8_t>((rgba & 0x0000FF00) >> 8);
     b = static_cast<std::uint8_t>((rgba & 0x00FF0000) >> 16);
