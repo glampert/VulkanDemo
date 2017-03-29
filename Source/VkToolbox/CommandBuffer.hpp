@@ -24,14 +24,14 @@ class CommandPool final
 {
 public:
 
-    explicit CommandPool(WeakRef<const VulkanContext> vkContext);
-    CommandPool(WeakRef<const VulkanContext> vkContext,
-                VkCommandPoolCreateFlags flags, int queueFamilyIndex);
+    explicit CommandPool(const VulkanContext & vkContext);
+    CommandPool(const VulkanContext & vkContext, VkCommandPoolCreateFlags flags, int queueFamilyIndex);
     ~CommandPool();
 
     void initialize(VkCommandPoolCreateFlags flags, int queueFamilyIndex);
     void shutdown();
     bool isInitialized() const;
+    void reset() const;
 
     // Movable.
     CommandPool(CommandPool && other);
@@ -42,16 +42,19 @@ public:
     CommandPool & operator = (const CommandPool &) = delete;
 
     // Accessors:
-    const VulkanContext & getVkContext() const;
-    WeakHandle<VkCommandPool> getVkCmdPoolHandle() const;
     int getQueueFamilyIndex() const;
+    VkCommandPool getVkCmdPoolHandle() const;
+    const VulkanContext & getVkContext() const;
+
+    // Implicit conversion to VkCommandPool.
+    operator VkCommandPool() const { return m_cmdPoolHandle; }
 
 private:
 
-    // Vulkan handles:
-    OwnedHandle<VkCommandPool>   m_cmdPoolHandle;
-    WeakRef<const VulkanContext> m_vkContext;
-    int                          m_queueFamilyIndex;
+    VkCommandPool m_cmdPoolHandle    = VK_NULL_HANDLE;
+    int           m_queueFamilyIndex = -1;
+
+    const VulkanContext * m_vkContext;
 };
 
 // ========================================================
@@ -62,14 +65,14 @@ class CommandBuffer final
 {
 public:
 
-    explicit CommandBuffer(WeakRef<const VulkanContext> vkContext);
-    CommandBuffer(WeakRef<const VulkanContext> vkContext,
-                  VkCommandBufferLevel lvl, WeakHandle<VkCommandPool> pool);
+    explicit CommandBuffer(const VulkanContext & vkContext);
+    CommandBuffer(const VulkanContext & vkContext, VkCommandBufferLevel lvl, VkCommandPool pool);
     ~CommandBuffer();
 
-    void initialize(VkCommandBufferLevel lvl, WeakHandle<VkCommandPool> pool);
+    void initialize(VkCommandBufferLevel lvl, VkCommandPool pool);
     void shutdown();
     bool isInitialized() const;
+    void reset() const;
 
     // Movable.
     CommandBuffer(CommandBuffer && other);
@@ -84,27 +87,33 @@ public:
     void endRecording() const;
 
     // Submit/execute previously recorded buffer.
-    void submit(WeakHandle<VkQueue> queue, WeakHandle<VkFence> fence = VK_NULL_HANDLE) const;
+    void submit(VkQueue queue, VkFence fence = VK_NULL_HANDLE) const;
+
+    // Submits and waits on a fence. Fence sourced from the context's main fence cache.
+    void submitAndWaitComplete(VkQueue queue) const;
 
     // Accessors:
-    const VulkanContext & getVkContext() const;
-    WeakHandle<VkCommandPool> getVkCmdPoolHandle() const;
-    WeakHandle<VkCommandBuffer> getVkCmdBufferHandle() const;
+    VkCommandPool   getVkCmdPoolHandle()   const;
+    VkCommandBuffer getVkCmdBufferHandle() const;
+    const VulkanContext & getVkContext()   const;
 
-    bool isInRecordingState() const;
-    bool isInExecutionState() const;
+    // Implicit conversion to VkCommandBuffer.
+    operator VkCommandBuffer() const { return m_cmdBufferHandle; }
+
+    bool isInRecordingState()  const;
+    bool isInSubmissionState() const;
 
 private:
 
-    // Vulkan handles:
-    OwnedHandle<VkCommandBuffer> m_cmdBufferHandle = VK_NULL_HANDLE;
-    WeakHandle<VkCommandPool>    m_cmdPoolHandle   = VK_NULL_HANDLE;
-    WeakRef<const VulkanContext> m_vkContext       = VK_NULL_HANDLE;
+    VkCommandBuffer m_cmdBufferHandle = VK_NULL_HANDLE;
+    VkCommandPool   m_cmdPoolHandle   = VK_NULL_HANDLE;
+
+    const VulkanContext * m_vkContext;
 
     enum
     {
-        FlagRecordingState = (1 << 1), // Between vkBeginCommandBuffer and vkEndCommandBuffer
-        FlagExecutionState = (1 << 2), // After vkEndCommandBuffer
+        FlagRecordingState  = (1 << 1), // Between vkBeginCommandBuffer and vkEndCommandBuffer
+        FlagSubmissionState = (1 << 2), // After vkEndCommandBuffer
     };
     mutable std::uint32_t m_stateFlags = 0;
 };
@@ -116,14 +125,19 @@ inline bool CommandPool::isInitialized() const
     return (m_cmdPoolHandle != VK_NULL_HANDLE);
 }
 
-inline WeakHandle<VkCommandPool> CommandPool::getVkCmdPoolHandle() const
+inline int CommandPool::getQueueFamilyIndex() const
+{
+    return m_queueFamilyIndex;
+}
+
+inline VkCommandPool CommandPool::getVkCmdPoolHandle() const
 {
     return m_cmdPoolHandle;
 }
 
-inline int CommandPool::getQueueFamilyIndex() const
+inline const VulkanContext & CommandPool::getVkContext() const
 {
-    return m_queueFamilyIndex;
+    return *m_vkContext;
 }
 
 // ========================================================
@@ -133,14 +147,19 @@ inline bool CommandBuffer::isInitialized() const
     return (m_cmdBufferHandle != VK_NULL_HANDLE);
 }
 
-inline WeakHandle<VkCommandPool> CommandBuffer::getVkCmdPoolHandle() const
+inline VkCommandPool CommandBuffer::getVkCmdPoolHandle() const
 {
     return m_cmdPoolHandle;
 }
 
-inline WeakHandle<VkCommandBuffer> CommandBuffer::getVkCmdBufferHandle() const
+inline VkCommandBuffer CommandBuffer::getVkCmdBufferHandle() const
 {
     return m_cmdBufferHandle;
+}
+
+inline const VulkanContext & CommandBuffer::getVkContext() const
+{
+    return *m_vkContext;
 }
 
 inline bool CommandBuffer::isInRecordingState() const
@@ -148,9 +167,9 @@ inline bool CommandBuffer::isInRecordingState() const
     return (m_stateFlags & FlagRecordingState) != 0;
 }
 
-inline bool CommandBuffer::isInExecutionState() const
+inline bool CommandBuffer::isInSubmissionState() const
 {
-    return (m_stateFlags & FlagExecutionState) != 0;
+    return (m_stateFlags & FlagSubmissionState) != 0;
 }
 
 // ========================================================

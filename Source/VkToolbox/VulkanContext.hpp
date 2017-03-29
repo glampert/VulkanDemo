@@ -47,11 +47,16 @@ public:
     static std::uint32_t  sm_appVersion;
     static std::uint32_t  sm_multiSampleCount;
     static VkFormat       sm_depthBufferFormat;
+    static bool           sm_useTripleBufferHint;
     static ValidationMode sm_validationMode;
 
-    // Initialization.
-    VulkanContext(WeakRef<const OSWindow> window, Size2D fbSize,
-                  WeakRef<const VkAllocationCallbacks> allocCBs = nullptr);
+    // Static initialization and shutdown for internal shared state.
+    // Call at the beginning/end of main().
+    static void initClass();
+    static void shutdownClass();
+
+    // Instance initialization.
+    VulkanContext(const OSWindow & window, Size2D fbSize, const VkAllocationCallbacks * allocCBs = nullptr);
 
     // Not copyable.
     VulkanContext(const VulkanContext &) = delete;
@@ -68,72 +73,115 @@ public:
     static bool isRelease();
 
     // Device (AKA GPU) info queries:
-    WeakHandle<VkDevice> getVkDeviceHandle() const;
+    VkDevice getVkDeviceHandle() const;
     const VkPhysicalDeviceFeatures & getDeviceFeatures() const;
     const VkPhysicalDeviceProperties & getDeviceProperties() const;
     const VkPhysicalDeviceMemoryProperties & getDeviceMemoryProperties() const;
     const VkFormatProperties & getVkFormatPropertiesForImageFormat(Image::Format format) const;
+    const VkImageFormatProperties & getVkImageFormatPropertiesForImageFormat(Image::Format format) const;
 
     // Accessors:
-    WeakRef<const OSWindow> getRenderWindow() const;
-    WeakRef<const VkAllocationCallbacks> getAllocationCallbacks() const;
-    Size2D getRenderWindowSize() const;
-    Size2D getFramebufferSize() const;
+    const OSWindow & getRenderWindow() const;
+    const VkAllocationCallbacks * getAllocationCallbacks() const;
+    VkFramebuffer getVkFramebufferHandle(int index) const;
+    Size2D getRenderWindowSize()   const;
+    Size2D getFramebufferSize()    const;
+    std::uint32_t getFrameNumber() const;
+    int getSwapChainBufferIndex()  const;
+    int getSwapChainBufferCount()  const;
 
     // Shareable objects:
+    FenceCache * getMainFenceCache() const;
     const RenderPass & getMainRenderPass() const;
-    const CommandPool & getMainCmdPool() const;
-    const CommandBuffer & getMainCmdBuffer() const;
-    WeakRef<FenceCache> getMainFenceCache();
+    const CommandPool & getMainTextureStagingCmdBufferPool() const;
+    const CommandBuffer & getMainTextureStagingCmdBuffer() const;
 
+    //
+    // Frame rendering:
+    //
+
+    void beginFrame();
+    void endFrame(array_view<const VkCommandBuffer> submitBuffers, VkFence fence = VK_NULL_HANDLE);
+    void waitGpuIdle() const;
+
+    //
     // GPU queues info:
+    //
+
     struct GpuQueue
     {
-        WeakHandle<VkQueue> queue = VK_NULL_HANDLE;
-        std::int32_t familyIndex  = -1;
+        VkQueue      queue       = VK_NULL_HANDLE;
+        std::int32_t familyIndex = -1;
+
+        operator VkQueue() const { return queue; }
     };
+
     const GpuQueue & getPresentQueue() const;
     const GpuQueue & getGraphisQueue() const;
 
-    // Misc helpers:
+    //
+    // Miscellaneous helpers:
+    //
+
+    static constexpr auto ColorMaskRGBA = (VK_COLOR_COMPONENT_R_BIT |
+                                           VK_COLOR_COMPONENT_G_BIT |
+                                           VK_COLOR_COMPONENT_B_BIT |
+                                           VK_COLOR_COMPONENT_A_BIT);
+
     std::uint32_t getMemoryTypeFromProperties(std::uint32_t typeBits, VkFlags requirementsMask) const;
-    void setImageLayout(VkCommandBuffer cmdBuff, VkImage image, VkImageAspectFlags aspectMask,
-                        VkImageLayout oldImageLayout, VkImageLayout newImageLayout) const;
+
+    void changeImageLayout(const CommandBuffer * cmdBuff, VkImage image,
+                           VkImageAspectFlags aspectMask, VkImageLayout oldImageLayout,
+                           VkImageLayout newImageLayout, int baseMipLevel = 0, int mipLevelCount = 1) const;
+
+    void copyImage(const CommandBuffer * cmdBuff, VkImage srcImage,
+                   VkImage dstImage, Size2D size) const;
+
+    void createImage(const VkImageCreateInfo & imageInfo, VkMemoryPropertyFlags memoryProperties,
+                     VkImage * outImage, VkDeviceMemory * outImageMemory) const;
+
+    void copyBuffer(const CommandBuffer * cmdBuff, VkBuffer srcBuffer,
+                    VkBuffer dstBuffer, VkDeviceSize sizeToCopy,
+                    VkDeviceSize srcOffset = 0, VkDeviceSize dstOffset = 0) const;
+
+    void createBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags memoryProperties,
+                      VkBuffer * outBuffer, VkDeviceMemory * outBufferMemory) const;
 
 private:
 
     struct LayerProperties
     {
-        VkLayerProperties properties = {};
-        std::vector<VkExtensionProperties> extensions;
+        VkLayerProperties                  properties = {};
+        std::vector<VkExtensionProperties> extensions = {};
     };
 
     struct DepthBuffer
     {
-        OwnedHandle<VkImage> image = VK_NULL_HANDLE;
-        OwnedHandle<VkImageView> view = VK_NULL_HANDLE;
-        OwnedHandle<VkDeviceMemory> memory = VK_NULL_HANDLE;
+        VkImage        image  = VK_NULL_HANDLE;
+        VkImageView    view   = VK_NULL_HANDLE;
+        VkDeviceMemory memory = VK_NULL_HANDLE;
     };
 
     struct SwapChainBuffer
     {
-        WeakHandle<VkImage> image = VK_NULL_HANDLE; // Owned by the swap-chain
-        OwnedHandle<VkImageView> view = VK_NULL_HANDLE;
-        OwnedHandle<VkFramebuffer> framebuffer = VK_NULL_HANDLE;
+        VkImage       image       = VK_NULL_HANDLE; // Owned by the swap-chain
+        VkImageView   view        = VK_NULL_HANDLE;
+        VkFramebuffer framebuffer = VK_NULL_HANDLE;
     };
 
     struct SwapChainState
     {
-        Size2D framebufferSize = {0,0};
-        std::uint32_t swapChainBufferCount = 0;
-        OwnedHandle<VkSwapchainKHR> swapChain = VK_NULL_HANDLE;
-        std::vector<SwapChainBuffer> swapChainBuffers;
+        Size2D                         framebufferSize = {0,0};
+        std::uint32_t                  bufferIndex     = 0;
+        std::uint32_t                  bufferCount     = 0;
+        VkSwapchainKHR                 handle          = VK_NULL_HANDLE;
+        std::array<SwapChainBuffer, 3> buffers         = {};
     };
 
     struct GpuInfo
     {
-        VkPhysicalDeviceFeatures features = {};
-        VkPhysicalDeviceProperties properties = {};
+        VkPhysicalDeviceFeatures         features         = {};
+        VkPhysicalDeviceProperties       properties       = {};
         VkPhysicalDeviceMemoryProperties memoryProperties = {};
     };
 
@@ -148,55 +196,61 @@ private:
     void initSwapChainExtensions();
     void initSwapChain();
 
-    // Framebuffer/depth-buffer initialization/shutdown:
+    // Framebuffer/depth-buffer/misc initialization/shutdown:
     void initDepthBuffer();
     void destroyDepthBuffer();
     void initFramebuffers();
     void destroyFramebuffers();
     void initRenderPass();
-    void initCommandPoolAndBuffer();
+    void initCommandPoolAndBuffers();
+    void initSemaphores();
+    void cacheFormatProperties();
 
 private:
 
     // API global context.
-    OwnedHandle<VkInstance> m_instance = VK_NULL_HANDLE;
+    VkInstance m_instance = VK_NULL_HANDLE;
 
-    // Layers and extensions available for the VK Instance.
-    std::vector<LayerProperties> m_instanceLayerProperties;
+    // The rendering device we are going to use (always GPU 0 for now).
+    VkDevice m_device = VK_NULL_HANDLE;
 
     // User provided allocations callbacks or nullptr.
-    WeakRef<const VkAllocationCallbacks> m_allocationCallbacks = nullptr;
+    const VkAllocationCallbacks * m_allocationCallbacks = nullptr;
 
     // Ref to the OS Window we are rendering to (non-null).
-    WeakRef<const OSWindow> m_renderWindow = nullptr;
+    const OSWindow * m_renderWindow = nullptr;
 
     // Render target surface for the rendering window (our screen framebuffer).
-    OwnedHandle<VkSurfaceKHR> m_renderSurface = VK_NULL_HANDLE;
+    VkSurfaceKHR m_renderSurface = VK_NULL_HANDLE;
 
     // Texture format of the rendering surface (the framebuffer).
     VkFormat m_renderSurfaceFormat = VK_FORMAT_UNDEFINED;
 
-    // Image swap-chain (framebuffers):
-    SwapChainState m_swapChainState;
+    // Incrementing value with the current frame number. Bumped each beginFrame().
+    std::uint32_t m_frameNumber = 0;
 
-    // Depth/stencil buffer images & views:
+    // Image swap-chain (framebuffers).
+    SwapChainState m_swapChain;
+
+    // Depth/stencil buffer images & views.
     DepthBuffer m_depthBuffer;
 
-    // Main/default render pass, command pool/buffer and fence cache.
-    // These are shared for this context, so need explicit synchronization
-    // between threads using the same VulkanContext.
+    // Semaphores to synchronize the swap-chain framebuffer swaps.
+    VkSemaphore m_imageAvailableSemaphore = VK_NULL_HANDLE;
+    VkSemaphore m_renderFinishedSemaphore = VK_NULL_HANDLE;
+
+    // Main/default render pass and shareable fence cache.
     RenderPass m_mainRenderPass;
-    CommandPool m_mainCmdPool;
-    CommandBuffer m_mainCmdBuffer;
     std::unique_ptr<FenceCache> m_mainFenceCache;
 
-    // The rendering device we are going to use (always GPU 0 for now).
-    OwnedHandle<VkDevice> m_device = VK_NULL_HANDLE;
+    // Command buffers used exclusively for texture uploads (staging resources).
+    CommandPool m_mainTextureStagingCmdBufferPool;
+    CommandBuffer m_mainTextureStagingCmdBuffer;
 
     // Handle to the "Physical Device", AKA the GPU. This handle is owned by the VK instance.
     // Vulkan allows explicitly selecting the device you want to use, on systems with more than one
-    // GPU (e.g. SLI, Crossfire, etc). We will be sticking to a single GPU in this demo for simplicity.
-    WeakHandle<VkPhysicalDevice> m_gpuPhysDevice = VK_NULL_HANDLE;
+    // GPU (e.g. SLI, Crossfire, etc). We will be sticking to a single GPU for now.
+    VkPhysicalDevice m_gpuPhysDevice = VK_NULL_HANDLE;
 
     // Information about the rendering, compute and present queues available in the first GPU.
     std::uint32_t m_gpuQueueFamilyCount = 0;
@@ -211,7 +265,11 @@ private:
     GpuInfo m_gpuInfo;
 
     // These are queried all the time by Textures, so we cache one for each supported image format.
-    enum_array<Image::Format, VkFormatProperties> m_imgFormatProps;
+    enum_array<Image::Format, VkFormatProperties> m_formatPropsCache;
+    enum_array<Image::Format, VkImageFormatProperties> m_imageFormatPropsCache;
+
+    // Layers and extensions available for the VK Instance.
+    std::vector<LayerProperties> m_instanceLayerProperties;
 };
 
 // ========================================================
@@ -222,16 +280,12 @@ class FenceCache final
 {
 public:
 
-    explicit FenceCache(WeakRef<const VulkanContext> vkContext)
-        : m_vkContext{ vkContext }
+    explicit FenceCache(const VulkanContext & vkContext)
+        : m_vkContext{ &vkContext }
         , m_allocCount{ 0 }
     { }
 
-    const VulkanContext & getVkContext() const
-    {
-        assert(m_vkContext != nullptr);
-        return *m_vkContext;
-    }
+    const VulkanContext & getVkContext() const { return *m_vkContext; }
 
     // Note: Will free all fences currently in the cache!
     // Make sure no external refs remain.
@@ -242,34 +296,42 @@ public:
     FenceCache(const FenceCache &) = delete;
     FenceCache & operator = (const FenceCache &) = delete;
 
+    // Fill the cache with a preallocated number of fences, so next
+    // allocRecyclableFence() call won't have to fill up the cache.
+    // numFences must be <= 128.
+    void preallocate(int numFences);
+
     // Get a temporary VkFence from the cache. Once you've waited on the fence,
     // you must call recycleFence() to return it to the cache. The cache cleans
     // up all remaining fences on shutdown.
-    WeakHandle<VkFence> AllocRecyclableFence();
-    void recycleFence(WeakHandle<VkFence> fence);
+    VkFence allocRecyclableFence();
+    void recycleFence(VkFence fence);
 
 private:
 
-    WeakRef<const VulkanContext> m_vkContext;
+    VkFence newFence();
+
+    const VulkanContext * m_vkContext;
     int m_allocCount;
 
     // Fixed-size cache of recyclable fence handles for AutoFences.
-    FixedSizeArray<OwnedHandle<VkFence>, 128> m_cache;
+    FixedSizeArray<VkFence, 128> m_cache;
 };
 
 // ========================================================
 // class AutoFence:
 // ========================================================
 
-// Amount of time, in nanoseconds, to wait for a fence to be signaled.
-constexpr auto DefaultFenceWaitTimeout = UINT64_C(100000000);
+// Amount of time, in nanoseconds, to wait for a fence/semaphore to be signaled.
+constexpr auto DefaultFenceWaitTimeout  = UINT64_C(100000000);
+constexpr auto InfiniteFenceWaitTimeout = UINT64_MAX;
 
 // Automatically waits and recycles the underlaying VkFence object.
 class AutoFence final
 {
 public:
 
-    explicit AutoFence(WeakRef<FenceCache> cache);
+    explicit AutoFence(FenceCache * cache);
 
     // Implicitly waits on the fence if not already waited/signaled.
     ~AutoFence();
@@ -294,14 +356,122 @@ public:
     bool isWaitable() const;
 
     // Accessors:
-    WeakRef<FenceCache> getFenceCache() const;
-    WeakHandle<VkFence> getVkFenceHandle() const;
+    FenceCache * getFenceCache() const;
+    VkFence getVkFenceHandle() const;
+
+    // Implicit conversion to VkFence.
+    operator VkFence() const { return m_fenceHandle; }
 
 private:
 
     // Owned my the context and recycled once waited on.
-    WeakRef<FenceCache> m_cache;
-    WeakHandle<VkFence> m_fenceHandle;
+    FenceCache * m_cache;
+    VkFence      m_fenceHandle;
+};
+
+// ========================================================
+// struct ScopedMapMemory:
+// ========================================================
+
+struct ScopedMapMemory final
+{
+    ScopedMapMemory(const VulkanContext & context, VkDeviceMemory memory, VkDeviceSize offset,
+                    VkDeviceSize size, VkMemoryMapFlags flags, void ** ppData)
+        : m_deviceHandle{ context.getVkDeviceHandle() }
+        , m_memoryHandle{ memory }
+    {
+        const VkResult res = vkMapMemory(m_deviceHandle, memory, offset, size, flags, ppData);
+        assert(res == VK_SUCCESS); (void)res;
+    }
+
+    ~ScopedMapMemory()
+    {
+        vkUnmapMemory(m_deviceHandle, m_memoryHandle);
+    }
+
+    ScopedMapMemory(const ScopedMapMemory &) = delete;
+    ScopedMapMemory & operator = (const ScopedMapMemory &) = delete;
+
+private:
+
+    VkDevice       m_deviceHandle;
+    VkDeviceMemory m_memoryHandle;
+};
+
+// ========================================================
+// template class VDeleter:
+// ========================================================
+
+// Base on as class with same name used in Alexander Overvoorde's Vulkan Tutorials.
+// https://github.com/Overv/VulkanTutorial
+//
+template<typename T>
+class VDeleter final
+{
+public:
+
+    using DeleteFunc = void (VKAPI_CALL*)(VkDevice, T, const VkAllocationCallbacks *);
+
+    VDeleter(const VDeleter &) = delete;
+    VDeleter & operator = (const VDeleter &) = delete;
+
+    VDeleter(const VulkanContext * context, DeleteFunc deleter, T handle = VK_NULL_HANDLE)
+        : m_handle{ handle }
+        , m_deleter{ deleter }
+        , m_vkContext{ context }
+    { }
+
+    ~VDeleter()
+    {
+        cleanup();
+    }
+
+    const T * operator & () const
+    {
+        return &m_handle;
+    }
+
+    operator T() const
+    {
+        return m_handle;
+    }
+
+    T * replace()
+    {
+        cleanup();
+        return &m_handle;
+    }
+
+    VDeleter & operator = (T rhs)
+    {
+        if (rhs != m_handle)
+        {
+            cleanup();
+            m_handle = rhs;
+        }
+        return *this;
+    }
+
+    template<typename V>
+    bool operator == (V rhs) const
+    {
+        return m_handle == T(rhs);
+    }
+
+private:
+
+    T                     m_handle;
+    DeleteFunc            m_deleter;
+    const VulkanContext * m_vkContex;
+
+    void cleanup()
+    {
+        if (m_handle != VK_NULL_HANDLE)
+        {
+            m_deleter(m_vkContex->getVkDeviceHandle(), m_handle, m_vkContex->getAllocationCallbacks());
+            m_handle = VK_NULL_HANDLE;
+        }
+    }
 };
 
 // ========================================================
@@ -318,7 +488,7 @@ inline bool VulkanContext::isRelease()
     return (sm_validationMode == Release);
 }
 
-inline WeakHandle<VkDevice> VulkanContext::getVkDeviceHandle() const
+inline VkDevice VulkanContext::getVkDeviceHandle() const
 {
     return m_device;
 }
@@ -330,7 +500,12 @@ inline const VkPhysicalDeviceMemoryProperties & VulkanContext::getDeviceMemoryPr
 
 inline const VkFormatProperties & VulkanContext::getVkFormatPropertiesForImageFormat(const Image::Format format) const
 {
-    return m_imgFormatProps[format];
+    return m_formatPropsCache[format];
+}
+
+inline const VkImageFormatProperties & VulkanContext::getVkImageFormatPropertiesForImageFormat(const Image::Format format) const
+{
+    return m_imageFormatPropsCache[format];
 }
 
 inline const VkPhysicalDeviceProperties & VulkanContext::getDeviceProperties() const
@@ -343,19 +518,44 @@ inline const VkPhysicalDeviceFeatures & VulkanContext::getDeviceFeatures() const
     return m_gpuInfo.features;
 }
 
-inline WeakRef<const OSWindow> VulkanContext::getRenderWindow() const
+inline const OSWindow & VulkanContext::getRenderWindow() const
 {
-    return m_renderWindow;
+    return *m_renderWindow;
 }
 
-inline WeakRef<const VkAllocationCallbacks> VulkanContext::getAllocationCallbacks() const
+inline const VkAllocationCallbacks * VulkanContext::getAllocationCallbacks() const
 {
     return m_allocationCallbacks;
 }
 
 inline Size2D VulkanContext::getFramebufferSize() const
 {
-    return m_swapChainState.framebufferSize;
+    return m_swapChain.framebufferSize;
+}
+
+inline std::uint32_t VulkanContext::getFrameNumber() const
+{
+    return m_frameNumber;
+}
+
+inline VkFramebuffer VulkanContext::getVkFramebufferHandle(const int index) const
+{
+    return m_swapChain.buffers[index].framebuffer;
+}
+
+inline int VulkanContext::getSwapChainBufferIndex() const
+{
+    return static_cast<int>(m_swapChain.bufferIndex);
+}
+
+inline int VulkanContext::getSwapChainBufferCount() const
+{
+    return static_cast<int>(m_swapChain.bufferCount);
+}
+
+inline FenceCache * VulkanContext::getMainFenceCache() const
+{
+    return m_mainFenceCache.get();
 }
 
 inline const RenderPass & VulkanContext::getMainRenderPass() const
@@ -363,19 +563,14 @@ inline const RenderPass & VulkanContext::getMainRenderPass() const
     return m_mainRenderPass;
 }
 
-inline const CommandPool & VulkanContext::getMainCmdPool() const
+inline const CommandPool & VulkanContext::getMainTextureStagingCmdBufferPool() const
 {
-    return m_mainCmdPool;
+    return m_mainTextureStagingCmdBufferPool;
 }
 
-inline const CommandBuffer & VulkanContext::getMainCmdBuffer() const
+inline const CommandBuffer & VulkanContext::getMainTextureStagingCmdBuffer() const
 {
-    return m_mainCmdBuffer;
-}
-
-inline WeakRef<FenceCache> VulkanContext::getMainFenceCache()
-{
-    return m_mainFenceCache.get();
+    return m_mainTextureStagingCmdBuffer;
 }
 
 inline const VulkanContext::GpuQueue & VulkanContext::getPresentQueue() const
@@ -388,13 +583,18 @@ inline const VulkanContext::GpuQueue & VulkanContext::getGraphisQueue() const
     return m_gpuGraphicsQueue;
 }
 
+inline void VulkanContext::waitGpuIdle() const
+{
+    vkDeviceWaitIdle(m_device);
+}
+
 // ========================================================
 // AutoFence inline methods:
 // ========================================================
 
-inline AutoFence::AutoFence(WeakRef<FenceCache> cache)
+inline AutoFence::AutoFence(FenceCache * cache)
     : m_cache{ cache }
-    , m_fenceHandle{ m_cache->AllocRecyclableFence() }
+    , m_fenceHandle{ m_cache->allocRecyclableFence() }
 {
 }
 
@@ -435,12 +635,12 @@ inline bool AutoFence::isWaitable() const
     return (m_fenceHandle != VK_NULL_HANDLE);
 }
 
-inline WeakRef<FenceCache> AutoFence::getFenceCache() const
+inline FenceCache * AutoFence::getFenceCache() const
 {
     return m_cache;
 }
 
-inline WeakHandle<VkFence> AutoFence::getVkFenceHandle() const
+inline VkFence AutoFence::getVkFenceHandle() const
 {
     return m_fenceHandle;
 }

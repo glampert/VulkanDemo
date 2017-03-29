@@ -41,12 +41,12 @@ class Resource
 {
 public:
 
+    Resource(const VulkanContext * vkContext, ResourceId id);
+    virtual ~Resource();
+
     // Not copyable.
     Resource(const Resource &) = delete;
     Resource & operator = (const Resource &) = delete;
-
-    Resource(WeakRef<const VulkanContext> vkContext, ResourceId id);
-    virtual ~Resource();
 
     // Load or reload the resource from file.
     virtual bool load() = 0;
@@ -71,8 +71,8 @@ protected:
     virtual void clear();
 
     // Common resource data:
-    WeakRef<const VulkanContext> m_vkContext;
-    ResourceId m_resId;
+    const VulkanContext * m_vkContext;
+    ResourceId            m_resId;
 };
 
 // ========================================================

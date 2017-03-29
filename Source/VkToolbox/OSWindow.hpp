@@ -18,12 +18,12 @@ class OSWindow final
 {
 public:
 
-    struct CreateParameters final
+    struct CreateParameters
     {
-        int width;
-        int height;
+        int          width;
+        int          height;
+        bool         openMaximized;
         const char * title;
-        bool openMaximized;
     };
 
     // Different types for each kind of handle.
@@ -58,8 +58,9 @@ public:
     template<typename T> void setUserPointer(T * ptr);
 
     // Window/system events:
-    std::function<bool(OSWindow &)>               onClose;  // Called when the user tries to close the window.
-    std::function<void(OSWindow &, const Size2D)> onResize; // Called when the user resizes the window.
+    std::function<bool()>             onClose;  // Called when the user tries to close the window.
+    std::function<void()>             onRedraw; // Called every run of the event loop to repaint the screen.
+    std::function<void(const Size2D)> onResize; // Called when the user resizes the window.
 
 private:
 

@@ -291,7 +291,34 @@ static bool GlslToSPIRV(const VkShaderStageFlagBits shaderType,
     }
     GlslPrintWarnings(program, "program", shaderDebugName);
 
-    glslang::GlslangToSpv(*program.getIntermediate(stage), *outSpirVBinary);
+    #if DEBUG
+    if (VulkanContext::isDebug())
+    {
+        spv::SpvBuildLogger debugLogger;
+        glslang::GlslangToSpv(*program.getIntermediate(stage), *outSpirVBinary, &debugLogger);
+
+        std::string spvMessages = debugLogger.getAllMessages();
+        if (!spvMessages.empty())
+        {
+            while (std::isspace(spvMessages.back())) // Right-trim whitespace
+            {
+                spvMessages.pop_back();
+            }
+
+            if (!spvMessages.empty())
+            {
+                Log::warningF("GlslangToSpv Debug output:");
+                Log::warningF("%s", spvMessages.c_str());
+                Log::warningF("--------------------------");
+            }
+        }
+    }
+    else
+    #endif // DEBUG
+    {
+        glslang::GlslangToSpv(*program.getIntermediate(stage), *outSpirVBinary);
+    }
+
     return true;
 }
 
@@ -321,8 +348,8 @@ const enum_array<GlslShaderStage::Id, VkShaderStageFlagBits> GlslShaderStage::Vk
 // class GlslShader:
 // ========================================================
 
-GlslShader::GlslShader(WeakRef<const VulkanContext> vkContext, ResourceId id)
-    : Resource{ vkContext, id }
+GlslShader::GlslShader(const VulkanContext & vkContext, ResourceId id)
+    : Resource{ &vkContext, id }
     , m_sourceCode{ nullptr }
     , m_stages{}
 {
@@ -363,12 +390,13 @@ void GlslShader::setSourceCode(const char * const glslSource)
 
 bool GlslShader::reloadCurrent()
 {
-    const char * const name = getId().getName();
     if (isShutdown())
     {
-        Log::warningF("Resource %s is already shutdown and cannot be loaded!", name);
+        Log::warningF("GlslShader is already shutdown and cannot be loaded!");
         return false;
     }
+
+    const char * const name = getId().getName();
 
     GlslShaderStageArray newStages{};
     const auto sourceLen = std::strlen(m_sourceCode.get());
@@ -390,12 +418,13 @@ bool GlslShader::reloadCurrent()
 
 bool GlslShader::load()
 {
-    const char * const name = getId().getName();
     if (isShutdown())
     {
-        Log::warningF("Resource %s is already shutdown and cannot be loaded!", name);
+        Log::warningF("GlslShader is already shutdown and cannot be loaded!");
         return false;
     }
+
+    const char * const name = getId().getName();
 
     std::size_t newSourceSize = 0;
     std::unique_ptr<char[]> newSourceCode = loadTextFile(name, &newSourceSize);
@@ -425,11 +454,11 @@ void GlslShader::unload()
     // Release the old stage modules if needed:
     if (!m_stages.empty())
     {
-        WeakHandle<VkDevice> device = getVkContext().getVkDeviceHandle();
-        WeakRef<const VkAllocationCallbacks> allocator = getVkContext().getAllocationCallbacks();
+        const auto device   = getVkContext().getVkDeviceHandle();
+        const auto allocCBs = getVkContext().getAllocationCallbacks();
         for (int s = 0; s < m_stages.size(); ++s)
         {
-            vkDestroyShaderModule(device, m_stages[s].moduleHandle, allocator);
+            vkDestroyShaderModule(device, m_stages[s].moduleHandle, allocCBs);
         }
         m_stages.clear();
     }
@@ -468,11 +497,11 @@ int GlslShader::getVkPipelineStages(array_view<VkPipelineShaderStageCreateInfo> 
     return m_stages.size();
 }
 
-OwnedHandle<VkShaderModule> GlslShader::createShaderModule(const VulkanContext & vkContext,
-                                                           const VkShaderStageFlagBits shaderType,
-                                                           const char * const shaderDebugName,
-                                                           const array_view<const char *> glslSourceStrings,
-                                                           const array_view<const int> glslSourceStringLengths)
+VkShaderModule GlslShader::createShaderModule(const VulkanContext & vkContext,
+                                              const VkShaderStageFlagBits shaderType,
+                                              const char * const shaderDebugName,
+                                              const array_view<const char *> glslSourceStrings,
+                                              const array_view<const int> glslSourceStringLengths)
 {
     std::vector<std::uint32_t> spirvBinary;
     if (!GlslToSPIRV(shaderType, shaderDebugName, glslSourceStrings, glslSourceStringLengths, &spirvBinary))
@@ -481,7 +510,7 @@ OwnedHandle<VkShaderModule> GlslShader::createShaderModule(const VulkanContext &
         return VK_NULL_HANDLE;
     }
 
-    VkShaderModuleCreateInfo shaderModuleInfo = {};
+    VkShaderModuleCreateInfo shaderModuleInfo;
     shaderModuleInfo.sType    = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
     shaderModuleInfo.pNext    = nullptr;
     shaderModuleInfo.flags    = 0;
@@ -624,12 +653,12 @@ bool GlslShader::createShaderStages(const VulkanContext & vkContext,
     // Throw everything away and return false if a shader stage failed.
     if (failedCount != 0)
     {
-        WeakHandle<VkDevice> device = vkContext.getVkDeviceHandle();
-        WeakRef<const VkAllocationCallbacks> allocator = vkContext.getAllocationCallbacks();
+        const auto device   = vkContext.getVkDeviceHandle();
+        const auto allocCBs = vkContext.getAllocationCallbacks();
 
         for (int s = 0; s < outStages->size(); ++s)
         {
-            vkDestroyShaderModule(device, (*outStages)[s].moduleHandle, allocator);
+            vkDestroyShaderModule(device, (*outStages)[s].moduleHandle, allocCBs);
         }
 
         outStages->clear();
@@ -649,6 +678,20 @@ void GlslShader::initClass()
 
     glslang::InitializeProcess();
     GlslGetBuiltInResources(); // Force creating the shared instance.
+
+    if (VulkanContext::isDebug())
+    {
+        GlslShaderPreproc::setOptimizations(false, true);
+    }
+    else
+    {
+        GlslShaderPreproc::setOptimizations(true, false);
+    }
+
+    GlslShaderPreproc::setVersion(450, true, true);
+    GlslShaderPreproc::setExtension("GL_ARB_separate_shader_objects",  "enable");
+    GlslShaderPreproc::setExtension("GL_ARB_shading_language_420pack", "enable");
+    GlslShaderPreproc::setExtension("GL_GOOGLE_include_directive",     "enable");
 }
 
 void GlslShader::shutdownClass()
@@ -670,9 +713,11 @@ namespace GlslShaderPreproc
 // Globals:
 
 static bool s_allDefinesStrUpToDate = true;
+static bool s_pragmaOptimize        = true;
+static bool s_pragmaDebug           = false;
 
-static str512 s_allDefinesString;
-static str256 s_globalShaderIncPath;
+static str_sized<1000>     s_allDefinesString;
+static str_sized<300>      s_globalShaderIncPath;
 
 static std::vector<Define> s_globalDefines;
 static std::vector<str128> s_glslExtensions;
@@ -788,6 +833,12 @@ void setVersion(const int version, const bool core, const bool fwdCompat)
     s_glslProfileUsed   = (core ? ECoreProfile : ECompatibilityProfile);
 }
 
+void setOptimizations(const bool optimize, const bool debug)
+{
+    s_pragmaOptimize = optimize;
+    s_pragmaDebug    = debug;
+}
+
 const Define * findDefine(const char * const name)
 {
     return findDefineInternal(name, false);
@@ -810,6 +861,24 @@ const char * getAllDefinesString()
 
         s_allDefinesString.setf("#version %i%s\n", 
             s_glslVersionUsed, (s_glslProfileUsed == ECoreProfile ? " core" : ""));
+
+        if (s_pragmaOptimize) // ON by default
+        {
+            s_allDefinesString += "#pragma optimize(on)\n";
+        }
+        else
+        {
+            s_allDefinesString += "#pragma optimize(off)\n";
+        }
+
+        if (s_pragmaDebug) // OFF by default
+        {
+            s_allDefinesString += "#pragma debug(on)\n";
+        }
+        else
+        {
+            s_allDefinesString += "#pragma debug(off)\n";
+        }
 
         for (const str128 & ext : s_glslExtensions)
         {

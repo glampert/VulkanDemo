@@ -15,6 +15,7 @@ namespace VkToolbox
 {
 
 class Image;
+class CommandBuffer;
 
 // ========================================================
 // class Sampler:
@@ -24,9 +25,8 @@ class Sampler final
 {
 public:
 
-    explicit Sampler(WeakRef<const VulkanContext> vkContext);
-    Sampler(WeakRef<const VulkanContext> vkContext,
-            const VkSamplerCreateInfo & samplerCreateInfo);
+    explicit Sampler(const VulkanContext & vkContext);
+    Sampler(const VulkanContext & vkContext, const VkSamplerCreateInfo & samplerCreateInfo);
     ~Sampler();
 
     void initialize(const VkSamplerCreateInfo & samplerCreateInfo);
@@ -42,15 +42,18 @@ public:
     Sampler & operator = (const Sampler &) = delete;
 
     // Accessors:
+    VkSampler getVkSamplerHandle() const;
     const VulkanContext & getVkContext() const;
-    WeakHandle<VkSampler> getVkSamplerHandle() const;
     const VkSamplerCreateInfo & getVkSamplerDesc() const;
+
+    // Implicit conversion to VkSampler.
+    operator VkSampler() const { return m_samplerHandle; }
 
 private:
 
-    WeakRef<const VulkanContext> m_vkContext;
-    OwnedHandle<VkSampler>       m_samplerHandle;
-    VkSamplerCreateInfo          m_samplerDesc;
+    VkSampler             m_samplerHandle = VK_NULL_HANDLE;
+    const VulkanContext * m_vkContext;
+    VkSamplerCreateInfo   m_samplerDesc;
 };
 
 // ========================================================
@@ -62,7 +65,11 @@ class Texture final
 {
 public:
 
-    Texture(WeakRef<const VulkanContext> vkContext, ResourceId id);
+    // Static initialization and shutdown for internal shared state.
+    static void initClass();
+    static void shutdownClass();
+
+    Texture(const VulkanContext & vkContext, ResourceId id);
     ~Texture();
 
     // Movable.
@@ -76,34 +83,41 @@ public:
     bool isLoaded() const override;
 
     // Accessors:
-    WeakHandle<VkImage> getVkImageHandle() const;
-    WeakHandle<VkImageView> getVkImageViewHandle() const;
-    WeakHandle<VkDeviceMemory> getVkDeviceMemoryHandle() const;
+    VkImage getVkImageHandle() const;
+    VkImageView getVkImageViewHandle() const;
+    VkDeviceMemory getVkDeviceMemoryHandle() const;
 
     bool isMipmapped() const;
     int getMipmapCount() const;
-    const Size3D getSize() const;
+    const Size2D getSize() const;
     VkFormat getFormat() const;
     VkImageViewType getViewType() const;
 
-    void setDontGenerateMipmapsOnLoad(bool trueIfShouldntGenMipmaps);
-    bool willGenerateMipmapsOnLoad() const;
-
     static VkFormat getVkFormat(Image::Format format);
+    static Image::Format getImageFormat(VkFormat format);
+
+    void setGenerateMipmapsOnLoad(bool trueIfShouldGenMipmaps);
+    bool generateMipmapsOnLoad() const;
+
+    // This can be safely called after the texture staging buffer of
+    // the context has been submitted and waited for completion.
+    void releaseStagingImage();
 
 private:
 
     void clear() override;
-    bool initGpuData(const Image & img);
+    void initVkTextureData(const Image & image);
 
-    OwnedHandle<VkImage>        m_imageHandle;
-    OwnedHandle<VkImageView>    m_imageViewHandle;
-    OwnedHandle<VkDeviceMemory> m_imageMemHandle;
-    Size3D                      m_imageSize;
-    VkFormat                    m_imageFormat;
-    VkImageViewType             m_imageViewType;
-    std::uint32_t               m_imageMipmaps   : 31;
-    std::uint32_t               m_dontGenMipmaps : 1;
+    VkImage         m_imageHandle;
+    VkImageView     m_imageViewHandle;
+    VkDeviceMemory  m_imageMemHandle;
+    VkImage         m_stagingImageHandle;
+    VkDeviceMemory  m_stagingImageMemHandle;
+    Size2D          m_imageSize;
+    VkFormat        m_imageFormat;
+    VkImageViewType m_imageViewType;
+    std::uint32_t   m_imageMipmaps   : 31;
+    std::uint32_t   m_dontGenMipmaps : 1;
 };
 
 // ========================================================
@@ -113,15 +127,14 @@ inline bool Sampler::isInitialized() const
     return (m_samplerHandle != VK_NULL_HANDLE);
 }
 
-inline const VulkanContext & Sampler::getVkContext() const
-{
-    assert(m_vkContext != nullptr);
-    return *m_vkContext;
-}
-
-inline WeakHandle<VkSampler> Sampler::getVkSamplerHandle() const
+inline VkSampler Sampler::getVkSamplerHandle() const
 {
     return m_samplerHandle;
+}
+
+inline const VulkanContext & Sampler::getVkContext() const
+{
+    return *m_vkContext;
 }
 
 inline const VkSamplerCreateInfo & Sampler::getVkSamplerDesc() const
@@ -136,17 +149,17 @@ inline bool Texture::isLoaded() const
     return (m_imageHandle != nullptr);
 }
 
-inline WeakHandle<VkImage> Texture::getVkImageHandle() const
+inline VkImage Texture::getVkImageHandle() const
 {
     return m_imageHandle;
 }
 
-inline WeakHandle<VkImageView> Texture::getVkImageViewHandle() const
+inline VkImageView Texture::getVkImageViewHandle() const
 {
     return m_imageViewHandle;
 }
 
-inline WeakHandle<VkDeviceMemory> Texture::getVkDeviceMemoryHandle() const
+inline VkDeviceMemory Texture::getVkDeviceMemoryHandle() const
 {
     return m_imageMemHandle;
 }
@@ -161,7 +174,7 @@ inline int Texture::getMipmapCount() const
     return static_cast<int>(m_imageMipmaps);
 }
 
-inline const Size3D Texture::getSize() const
+inline const Size2D Texture::getSize() const
 {
     return m_imageSize;
 }
@@ -176,12 +189,12 @@ inline VkImageViewType Texture::getViewType() const
     return m_imageViewType;
 }
 
-inline void Texture::setDontGenerateMipmapsOnLoad(const bool trueIfShouldntGenMipmaps)
+inline void Texture::setGenerateMipmapsOnLoad(const bool trueIfShouldGenMipmaps)
 {
-    m_dontGenMipmaps = trueIfShouldntGenMipmaps;
+    m_dontGenMipmaps = (trueIfShouldGenMipmaps ? false : true);
 }
 
-inline bool Texture::willGenerateMipmapsOnLoad() const
+inline bool Texture::generateMipmapsOnLoad() const
 {
     return !m_dontGenMipmaps;
 }

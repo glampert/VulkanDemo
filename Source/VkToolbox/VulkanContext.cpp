@@ -15,6 +15,8 @@
 
 #include "VulkanContext.hpp"
 #include "OSWindow.hpp"
+
+#include "GlslShader.hpp"
 #include "Texture.hpp"
 
 // For Win32SurfaceKH extension stuff.
@@ -31,10 +33,11 @@ namespace VkToolbox
 // VulkanContext statics:
 // ========================================================
 
-const char *  VulkanContext::sm_appName           = "VulkanApp";
-std::uint32_t VulkanContext::sm_appVersion        = 1;
-std::uint32_t VulkanContext::sm_multiSampleCount  = VK_SAMPLE_COUNT_1_BIT;
-VkFormat      VulkanContext::sm_depthBufferFormat = VK_FORMAT_D24_UNORM_S8_UINT;
+const char *  VulkanContext::sm_appName             = "VulkanApp";
+std::uint32_t VulkanContext::sm_appVersion          = VK_MAKE_VERSION(1, 0, 0);
+std::uint32_t VulkanContext::sm_multiSampleCount    = VK_SAMPLE_COUNT_1_BIT;
+VkFormat      VulkanContext::sm_depthBufferFormat   = VK_FORMAT_D24_UNORM_S8_UINT;
+bool          VulkanContext::sm_useTripleBufferHint = true;
 
 #if DEBUG
 VulkanContext::ValidationMode VulkanContext::sm_validationMode = VulkanContext::Debug;
@@ -46,17 +49,17 @@ VulkanContext::ValidationMode VulkanContext::sm_validationMode = VulkanContext::
 // class VulkanContext:
 // ========================================================
 
-VulkanContext::VulkanContext(WeakRef<const OSWindow> window, Size2D fbSize, WeakRef<const VkAllocationCallbacks> allocCBs)
+VulkanContext::VulkanContext(const OSWindow & window, const Size2D fbSize, const VkAllocationCallbacks * allocCBs)
     : m_allocationCallbacks{ allocCBs }
-    , m_renderWindow{ window }
-    , m_mainRenderPass{ this }
-    , m_mainCmdPool{ this }
-    , m_mainCmdBuffer{ this }
-    , m_mainFenceCache{ new FenceCache{ this } }
+    , m_renderWindow{ &window }
+    , m_mainRenderPass{ *this }
+    , m_mainFenceCache{ new FenceCache{ *this } }
+    , m_mainTextureStagingCmdBufferPool{ *this }
+    , m_mainTextureStagingCmdBuffer{ *this }
 {
     Log::debugF("Initializing Vulkan API context...");
 
-    m_swapChainState.framebufferSize = fbSize;
+    m_swapChain.framebufferSize = fbSize;
 
     initInstanceLayerProperties();
     initInstance();
@@ -64,28 +67,24 @@ VulkanContext::VulkanContext(WeakRef<const OSWindow> window, Size2D fbSize, Weak
     initSwapChainExtensions();
     initDevice();
     initSwapChain();
-    initCommandPoolAndBuffer();
+    initCommandPoolAndBuffers();
     initDepthBuffer();
     initRenderPass();
     initFramebuffers();
+    initSemaphores();
+    cacheFormatProperties();
 
-    m_mainCmdBuffer.endRecording();
-    {
-        AutoFence fence{ m_mainFenceCache.get() };
-        m_mainCmdBuffer.submit(m_gpuGraphicsQueue.queue, fence.getVkFenceHandle());
-    }
-
-    for (auto k : m_imgFormatProps.keys())
-    {
-        if (k == Image::Format::None)
-        {
-            m_imgFormatProps[k] = {};
-            continue;
-        }
-        vkGetPhysicalDeviceFormatProperties(m_gpuPhysDevice, Texture::getVkFormat(k), &m_imgFormatProps[k]);
-    }
+    // Finish the frame/depth buffer layout transitions
+    m_mainTextureStagingCmdBuffer.endRecording();
+    m_mainTextureStagingCmdBuffer.submitAndWaitComplete(m_gpuGraphicsQueue);
+    m_mainTextureStagingCmdBuffer.reset();
 
     Log::debugF("VulkanContext initialized successfully!");
+
+    if (isDebug())
+    {
+        logInstanceLayerProperties();
+    }
 }
 
 VulkanContext::~VulkanContext()
@@ -98,13 +97,22 @@ VulkanContext::~VulkanContext()
 
     // Have to explicitly shutdown because they depend on the device, destroyed below.
     m_mainRenderPass.shutdown();
-    m_mainCmdBuffer.shutdown();
-    m_mainCmdPool.shutdown();
     m_mainFenceCache->shutdown();
 
-    if (m_swapChainState.swapChain != VK_NULL_HANDLE)
+    m_mainTextureStagingCmdBuffer.shutdown();
+    m_mainTextureStagingCmdBufferPool.shutdown();
+
+    if (m_imageAvailableSemaphore != VK_NULL_HANDLE)
     {
-        vkDestroySwapchainKHR(m_device, m_swapChainState.swapChain, m_allocationCallbacks);
+        vkDestroySemaphore(m_device, m_imageAvailableSemaphore, m_allocationCallbacks);
+    }
+    if (m_renderFinishedSemaphore != VK_NULL_HANDLE)
+    {
+        vkDestroySemaphore(m_device, m_renderFinishedSemaphore, m_allocationCallbacks);
+    }
+    if (m_swapChain.handle != VK_NULL_HANDLE)
+    {
+        vkDestroySwapchainKHR(m_device, m_swapChain.handle, m_allocationCallbacks);
     }
     if (m_device != VK_NULL_HANDLE)
     {
@@ -210,7 +218,6 @@ void VulkanContext::initInstance()
 
     VkApplicationInfo appInfo        = {};
     appInfo.sType                    = VK_STRUCTURE_TYPE_APPLICATION_INFO;
-    appInfo.pNext                    = nullptr;
     appInfo.pApplicationName         = sm_appName;
     appInfo.applicationVersion       = sm_appVersion;
     appInfo.pEngineName              = sm_appName;
@@ -219,7 +226,6 @@ void VulkanContext::initInstance()
 
     VkInstanceCreateInfo instInfo    = {};
     instInfo.sType                   = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
-    instInfo.pNext                   = nullptr;
     instInfo.flags                   = 0;
     instInfo.pApplicationInfo        = &appInfo;
     instInfo.enabledLayerCount       = instanceLayerCount;
@@ -240,23 +246,22 @@ void VulkanContext::initDevice()
     };
     const auto deviceExtensionCount = static_cast<std::uint32_t>(arrayLength(deviceExtensionNames));
 
-    const float             queuePriorities[1] = { 0.0f }; // Dummy priorities - don't care atm
-    VkDeviceQueueCreateInfo queueCreateInfo    = {};
-    VkDeviceCreateInfo      deviceCreateInfo   = {};
+    // Dummy priorities - don't care atm
+    const float queuePriorities[] = { 0.0f, 0.0f };
 
-    queueCreateInfo.sType                      = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
-    queueCreateInfo.pNext                      = nullptr;
-    queueCreateInfo.queueCount                 = 1;
-    queueCreateInfo.pQueuePriorities           = queuePriorities;
-    queueCreateInfo.queueFamilyIndex           = m_gpuGraphicsQueue.familyIndex;
+    VkDeviceQueueCreateInfo queueCreateInfo  = {};
+    queueCreateInfo.sType                    = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+    queueCreateInfo.queueCount               = 1;
+    queueCreateInfo.pQueuePriorities         = queuePriorities;
+    queueCreateInfo.queueFamilyIndex         = m_gpuGraphicsQueue.familyIndex;
 
-    deviceCreateInfo.sType                     = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
-    deviceCreateInfo.pNext                     = nullptr;
-    deviceCreateInfo.queueCreateInfoCount      = 1;
-    deviceCreateInfo.pQueueCreateInfos         = &queueCreateInfo;
-    deviceCreateInfo.enabledExtensionCount     = deviceExtensionCount;
-    deviceCreateInfo.ppEnabledExtensionNames   = deviceExtensionNames;
-    deviceCreateInfo.pEnabledFeatures          = nullptr;
+    VkDeviceCreateInfo deviceCreateInfo      = {};
+    deviceCreateInfo.sType                   = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+    deviceCreateInfo.queueCreateInfoCount    = 1;
+    deviceCreateInfo.pQueueCreateInfos       = &queueCreateInfo;
+    deviceCreateInfo.enabledExtensionCount   = deviceExtensionCount;
+    deviceCreateInfo.ppEnabledExtensionNames = deviceExtensionNames;
+    deviceCreateInfo.pEnabledFeatures        = nullptr;
 
     VKTB_CHECK(vkCreateDevice(m_gpuPhysDevice, &deviceCreateInfo, m_allocationCallbacks, &m_device));
     assert(m_device != VK_NULL_HANDLE);
@@ -326,7 +331,6 @@ void VulkanContext::initSwapChainExtensions()
     #if defined(WIN32) || defined(WIN64)
     VkWin32SurfaceCreateInfoKHR surfCreateInfo = {};
     surfCreateInfo.sType     = VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR;
-    surfCreateInfo.pNext     = nullptr;
     surfCreateInfo.hinstance = reinterpret_cast<HINSTANCE>(m_renderWindow->getInstanceHandle());
     surfCreateInfo.hwnd      = reinterpret_cast<HWND>(m_renderWindow->getWindowHandle());
     VKTB_CHECK(vkCreateWin32SurfaceKHR(m_instance, &surfCreateInfo, m_allocationCallbacks, &m_renderSurface));
@@ -346,6 +350,8 @@ void VulkanContext::initSwapChainExtensions()
     // families, try to find one that supports both:
     for (std::uint32_t q = 0; q < m_gpuQueueFamilyCount; ++q)
     {
+        Log::debugF("Queue %u flags: %#x", q, m_gpuQueueProperties[q].queueFlags);
+
         if ((m_gpuQueueProperties[q].queueFlags & VK_QUEUE_GRAPHICS_BIT) != 0)
         {
             if (m_gpuGraphicsQueue.familyIndex == -1)
@@ -440,20 +446,21 @@ void VulkanContext::initSwapChain()
     {
         // If the surface size is undefined, size is set to the
         // the window size, but clamped to min/max extents supported.
-        swapChainExtent.width  = m_swapChainState.framebufferSize.width;
-        swapChainExtent.height = m_swapChainState.framebufferSize.height;
+        swapChainExtent.width  = m_swapChain.framebufferSize.width;
+        swapChainExtent.height = m_swapChain.framebufferSize.height;
 
         clamp(&swapChainExtent.width,  surfCapabilities.minImageExtent.width,  surfCapabilities.maxImageExtent.width);
         clamp(&swapChainExtent.height, surfCapabilities.minImageExtent.height, surfCapabilities.maxImageExtent.height);
 
-        m_swapChainState.framebufferSize.width  = swapChainExtent.width;
-        m_swapChainState.framebufferSize.height = swapChainExtent.height;
+        m_swapChain.framebufferSize.width  = swapChainExtent.width;
+        m_swapChain.framebufferSize.height = swapChainExtent.height;
     }
     else
     {
         // If the surface size is defined, the swap chain size must match.
         swapChainExtent = surfCapabilities.currentExtent;
     }
+    Log::debugF("SwapChainExtent={%u,%u}", swapChainExtent.width, swapChainExtent.height);
 
     // If mailbox mode is available, use it, as is the lowest-latency non-
     // tearing mode. If not, try IMMEDIATE which will usually be available,
@@ -482,12 +489,13 @@ void VulkanContext::initSwapChain()
     };
     Log::debugF("KHRPresentMode=%s", presentModeNames[std::uint32_t(swapChainPresentMode)]);
 
-    // Determine the number of VkImage's to use in the swap chain.
-    // We need to acquire only 1 presentable image at a time.
-    // Asking for minImageCount images ensures that we can acquire
-    // 1 presentable image as long as we present it before attempting
-    // to acquire another.
-    const std::uint32_t desiredNumberOfSwapChainImages = surfCapabilities.minImageCount;
+    std::uint32_t desiredNumberOfSwapChainImages = (sm_useTripleBufferHint ? 3 : surfCapabilities.minImageCount);
+    if (surfCapabilities.maxImageCount > 0 && desiredNumberOfSwapChainImages > surfCapabilities.maxImageCount)
+    {
+        desiredNumberOfSwapChainImages = surfCapabilities.maxImageCount;
+    }
+    Log::debugF("DesiredNumberOfSwapChainImages=%u", desiredNumberOfSwapChainImages);
+    assert(desiredNumberOfSwapChainImages <= m_swapChain.buffers.size());
 
     VkSurfaceTransformFlagBitsKHR preTransform;
     if (surfCapabilities.supportedTransforms & VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR)
@@ -504,7 +512,6 @@ void VulkanContext::initSwapChain()
 
     VkSwapchainCreateInfoKHR swapChainCreateInfo = {};
     swapChainCreateInfo.sType                    = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
-    swapChainCreateInfo.pNext                    = nullptr;
     swapChainCreateInfo.surface                  = m_renderSurface;
     swapChainCreateInfo.minImageCount            = desiredNumberOfSwapChainImages;
     swapChainCreateInfo.imageFormat              = m_renderSurfaceFormat;
@@ -515,7 +522,7 @@ void VulkanContext::initSwapChain()
     swapChainCreateInfo.imageArrayLayers         = 1;
     swapChainCreateInfo.presentMode              = swapChainPresentMode;
     swapChainCreateInfo.oldSwapchain             = VK_NULL_HANDLE;
-    swapChainCreateInfo.clipped                  = true;
+    swapChainCreateInfo.clipped                  = VK_TRUE;
     swapChainCreateInfo.imageColorSpace          = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR;
     swapChainCreateInfo.imageUsage               = imageUsage;
     swapChainCreateInfo.imageSharingMode         = VK_SHARING_MODE_EXCLUSIVE;
@@ -538,26 +545,20 @@ void VulkanContext::initSwapChain()
         swapChainCreateInfo.pQueueFamilyIndices   = queueFamilyIndices;
     }
 
-    VKTB_CHECK(vkCreateSwapchainKHR(m_device, &swapChainCreateInfo,
-                                    m_allocationCallbacks, &m_swapChainState.swapChain));
-    assert(m_swapChainState.swapChain != VK_NULL_HANDLE);
+    VKTB_CHECK(vkCreateSwapchainKHR(m_device, &swapChainCreateInfo, m_allocationCallbacks, &m_swapChain.handle));
+    assert(m_swapChain.handle != VK_NULL_HANDLE);
 
-    VKTB_CHECK(vkGetSwapchainImagesKHR(m_device, m_swapChainState.swapChain,
-                                       &m_swapChainState.swapChainBufferCount, nullptr));
-    assert(m_swapChainState.swapChainBufferCount >= 1);
+    VKTB_CHECK(vkGetSwapchainImagesKHR(m_device, m_swapChain.handle, &m_swapChain.bufferCount, nullptr));
+    assert(m_swapChain.bufferCount >= 1);
 
-    std::vector<VkImage> swapChainImages(m_swapChainState.swapChainBufferCount, VK_NULL_HANDLE);
-    VKTB_CHECK(vkGetSwapchainImagesKHR(m_device, m_swapChainState.swapChain,
-                                       &m_swapChainState.swapChainBufferCount,
-                                       swapChainImages.data()));
-    assert(m_swapChainState.swapChainBufferCount >= 1);
+    std::vector<VkImage> swapChainImages(m_swapChain.bufferCount, VK_NULL_HANDLE);
+    VKTB_CHECK(vkGetSwapchainImagesKHR(m_device, m_swapChain.handle, &m_swapChain.bufferCount, swapChainImages.data()));
+    assert(m_swapChain.bufferCount >= 1);
 
-    m_swapChainState.swapChainBuffers.reserve(m_swapChainState.swapChainBufferCount);
-    for (std::uint32_t i = 0; i < m_swapChainState.swapChainBufferCount; ++i)
+    for (std::uint32_t i = 0; i < m_swapChain.bufferCount; ++i)
     {
         VkImageViewCreateInfo imgViewCreateInfo           = {};
         imgViewCreateInfo.sType                           = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-        imgViewCreateInfo.pNext                           = nullptr;
         imgViewCreateInfo.format                          = m_renderSurfaceFormat;
         imgViewCreateInfo.components.r                    = VK_COMPONENT_SWIZZLE_R;
         imgViewCreateInfo.components.g                    = VK_COMPONENT_SWIZZLE_G;
@@ -575,10 +576,10 @@ void VulkanContext::initSwapChain()
         SwapChainBuffer scBuffer = {};
         scBuffer.image = swapChainImages[i];
         VKTB_CHECK(vkCreateImageView(m_device, &imgViewCreateInfo, m_allocationCallbacks, &scBuffer.view));
-        m_swapChainState.swapChainBuffers.push_back(scBuffer);
+        m_swapChain.buffers[i] = scBuffer;
     }
 
-    Log::debugF("Swap-chain created with %u image buffers.", m_swapChainState.swapChainBufferCount);
+    Log::debugF("Swap-chain created with %u image buffers.", m_swapChain.bufferCount);
 }
 
 void VulkanContext::initDepthBuffer()
@@ -605,11 +606,10 @@ void VulkanContext::initDepthBuffer()
     Log::debugF("DepthBufferFormat=%s", vkFormatToString(sm_depthBufferFormat));
 
     imageCreateInfo.sType                    = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
-    imageCreateInfo.pNext                    = nullptr;
     imageCreateInfo.imageType                = VK_IMAGE_TYPE_2D;
     imageCreateInfo.format                   = sm_depthBufferFormat;
-    imageCreateInfo.extent.width             = m_swapChainState.framebufferSize.width;
-    imageCreateInfo.extent.height            = m_swapChainState.framebufferSize.height;
+    imageCreateInfo.extent.width             = m_swapChain.framebufferSize.width;
+    imageCreateInfo.extent.height            = m_swapChain.framebufferSize.height;
     imageCreateInfo.extent.depth             = 1;
     imageCreateInfo.mipLevels                = 1;
     imageCreateInfo.arrayLayers              = 1;
@@ -627,7 +627,6 @@ void VulkanContext::initDepthBuffer()
 
     VkImageViewCreateInfo viewInfo           = {};
     viewInfo.sType                           = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-    viewInfo.pNext                           = nullptr;
     viewInfo.image                           = VK_NULL_HANDLE;
     viewInfo.format                          = sm_depthBufferFormat;
     viewInfo.components.r                    = VK_COMPONENT_SWIZZLE_R;
@@ -667,8 +666,8 @@ void VulkanContext::initDepthBuffer()
     VKTB_CHECK(vkBindImageMemory(m_device, m_depthBuffer.image, m_depthBuffer.memory, 0));
 
     // Set the image layout to depth stencil optimal:
-    setImageLayout(m_mainCmdBuffer.getVkCmdBufferHandle(), m_depthBuffer.image, viewInfo.subresourceRange.aspectMask,
-                   VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
+    changeImageLayout(&m_mainTextureStagingCmdBuffer, m_depthBuffer.image, viewInfo.subresourceRange.aspectMask,
+                      VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
 
     // And finally create the image view.
     viewInfo.image = m_depthBuffer.image;
@@ -707,30 +706,29 @@ void VulkanContext::initFramebuffers()
 
     VkFramebufferCreateInfo fbCreateInfo = {};
     fbCreateInfo.sType                   = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-    fbCreateInfo.pNext                   = nullptr;
-    fbCreateInfo.renderPass              = m_mainRenderPass.getVkRenderPassHandle();
+    fbCreateInfo.renderPass              = m_mainRenderPass;
     fbCreateInfo.attachmentCount         = static_cast<std::uint32_t>(arrayLength(attachments)); // Include the depth buffer
     fbCreateInfo.pAttachments            = attachments;
-    fbCreateInfo.width                   = m_swapChainState.framebufferSize.width;
-    fbCreateInfo.height                  = m_swapChainState.framebufferSize.height;
+    fbCreateInfo.width                   = m_swapChain.framebufferSize.width;
+    fbCreateInfo.height                  = m_swapChain.framebufferSize.height;
     fbCreateInfo.layers                  = 1;
 
-    for (std::uint32_t i = 0; i < m_swapChainState.swapChainBufferCount; ++i)
+    for (std::uint32_t i = 0; i < m_swapChain.bufferCount; ++i)
     {
-        attachments[0] = m_swapChainState.swapChainBuffers[i].view;
+        attachments[0] = m_swapChain.buffers[i].view;
         VKTB_CHECK(vkCreateFramebuffer(m_device, &fbCreateInfo, m_allocationCallbacks,
-                                       &m_swapChainState.swapChainBuffers[i].framebuffer));
-        assert(m_swapChainState.swapChainBuffers[i].framebuffer != VK_NULL_HANDLE);
+                                       &m_swapChain.buffers[i].framebuffer));
+        assert(m_swapChain.buffers[i].framebuffer != VK_NULL_HANDLE);
     }
 
-    Log::debugF("Framebuffer initialized.");
+    Log::debugF("Swap-chain Framebuffers initialized.");
 }
 
 void VulkanContext::destroyFramebuffers()
 {
     // Clean up the swap-chain image views and FBs.
     // The swap-chain images themselves are owned by the swap-chain.
-    for (SwapChainBuffer & scBuffer : m_swapChainState.swapChainBuffers)
+    for (SwapChainBuffer & scBuffer : m_swapChain.buffers)
     {
         if (scBuffer.view != VK_NULL_HANDLE)
         {
@@ -741,7 +739,6 @@ void VulkanContext::destroyFramebuffers()
             vkDestroyFramebuffer(m_device, scBuffer.framebuffer, m_allocationCallbacks);
         }
     }
-    m_swapChainState.swapChainBuffers.clear();
 }
 
 void VulkanContext::initRenderPass()
@@ -764,7 +761,7 @@ void VulkanContext::initRenderPass()
     attachments[0].storeOp               = VK_ATTACHMENT_STORE_OP_STORE;
     attachments[0].stencilLoadOp         = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
     attachments[0].stencilStoreOp        = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-    attachments[0].initialLayout         = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    attachments[0].initialLayout         = VK_IMAGE_LAYOUT_UNDEFINED;
     attachments[0].finalLayout           = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
     attachments[0].flags                 = 0;
 
@@ -791,45 +788,118 @@ void VulkanContext::initRenderPass()
     subpass.preserveAttachmentCount      = 0;
     subpass.pPreserveAttachments         = nullptr;
 
+    VkSubpassDependency dependency       = {};
+    dependency.srcSubpass                = VK_SUBPASS_EXTERNAL;
+    dependency.dstSubpass                = 0;
+    dependency.srcStageMask              = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+    dependency.srcAccessMask             = 0;
+    dependency.dstStageMask              = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+    dependency.dstAccessMask             = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+
     VkRenderPassCreateInfo rpCreateInfo  = {};
     rpCreateInfo.sType                   = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-    rpCreateInfo.pNext                   = nullptr;
     rpCreateInfo.attachmentCount         = static_cast<std::uint32_t>(arrayLength(attachments));
     rpCreateInfo.pAttachments            = attachments;
     rpCreateInfo.subpassCount            = 1;
     rpCreateInfo.pSubpasses              = &subpass;
-    rpCreateInfo.dependencyCount         = 0;
-    rpCreateInfo.pDependencies           = nullptr;
+    rpCreateInfo.dependencyCount         = 1;
+    rpCreateInfo.pDependencies           = &dependency;
 
     m_mainRenderPass.initialize(rpCreateInfo);
 
     Log::debugF("Main render-pass initialized.");
 }
 
-void VulkanContext::initCommandPoolAndBuffer()
+void VulkanContext::initCommandPoolAndBuffers()
 {
-    // Command pool:
-    m_mainCmdPool.initialize(VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
-                             m_gpuGraphicsQueue.familyIndex);
+    // Shared Command Pool:
+    m_mainTextureStagingCmdBufferPool.initialize(VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT, m_gpuGraphicsQueue.familyIndex);
 
-    // Default command buffer:
-    m_mainCmdBuffer.initialize(VK_COMMAND_BUFFER_LEVEL_PRIMARY,
-                               m_mainCmdPool.getVkCmdPoolHandle());
+    // Default command buffer for texture staging (used to initialized the Depth Buffer as well):
+    m_mainTextureStagingCmdBuffer.initialize(VK_COMMAND_BUFFER_LEVEL_PRIMARY, m_mainTextureStagingCmdBufferPool);
+    m_mainTextureStagingCmdBuffer.beginRecording();
 
-    // Put the default buffer in a state ready to receive commands.
-    // Must call vkEndCommandBuffer on it later on to be able to submit.
-    m_mainCmdBuffer.beginRecording();
-
-    Log::debugF("Main command pool and buffer initialized for queue %i.",
-                m_gpuGraphicsQueue.familyIndex);
+    Log::debugF("Main command pool and texture staging buffer initialized for queue %i.", m_gpuGraphicsQueue.familyIndex);
 }
 
-std::uint32_t VulkanContext::getMemoryTypeFromProperties(std::uint32_t typeBits, VkFlags requirementsMask) const
+void VulkanContext::initSemaphores()
+{
+    VkSemaphoreCreateInfo semaphoreInfo = {};
+    semaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+
+    VKTB_CHECK(vkCreateSemaphore(m_device, &semaphoreInfo, m_allocationCallbacks, &m_imageAvailableSemaphore));
+    VKTB_CHECK(vkCreateSemaphore(m_device, &semaphoreInfo, m_allocationCallbacks, &m_renderFinishedSemaphore));
+
+    Log::debugF("Frame semaphores initialized.");
+}
+
+void VulkanContext::beginFrame()
+{
+    ++m_frameNumber;
+
+    const VkResult res = vkAcquireNextImageKHR(m_device, m_swapChain.handle,
+                                               InfiniteFenceWaitTimeout, m_imageAvailableSemaphore,
+                                               VK_NULL_HANDLE, &m_swapChain.bufferIndex);
+
+    #if DEBUG
+    if (res != VK_SUCCESS)
+    {
+        Log::warningF("vkAcquireNextImageKHR failed: %s", vkResultToString(res));
+    }
+    #else // !DEBUG
+    (void)res;
+    #endif // DEBUG
+}
+
+void VulkanContext::endFrame(array_view<const VkCommandBuffer> submitBuffers, VkFence fence)
+{
+    const VkSemaphore waitSemaphores[]      = { m_imageAvailableSemaphore };
+    const VkSemaphore signalSemaphores[]    = { m_renderFinishedSemaphore };
+    const VkSwapchainKHR swapChains[]       = { m_swapChain.handle };
+    const VkPipelineStageFlags waitStages[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
+
+    VkSubmitInfo submitInfo;
+    submitInfo.sType                = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+    submitInfo.pNext                = nullptr;
+    submitInfo.waitSemaphoreCount   = 1;
+    submitInfo.pWaitSemaphores      = waitSemaphores;
+    submitInfo.pWaitDstStageMask    = waitStages;
+    submitInfo.commandBufferCount   = static_cast<std::uint32_t>(submitBuffers.size());
+    submitInfo.pCommandBuffers      = submitBuffers.data();
+    submitInfo.signalSemaphoreCount = 1;
+    submitInfo.pSignalSemaphores    = signalSemaphores;
+
+    VKTB_CHECK(vkQueueSubmit(m_gpuGraphicsQueue, 1, &submitInfo, fence));
+
+    VkPresentInfoKHR presentInfo;
+    presentInfo.sType               = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+    presentInfo.pNext               = nullptr;
+    presentInfo.waitSemaphoreCount  = 1;
+    presentInfo.pWaitSemaphores     = signalSemaphores;
+    presentInfo.swapchainCount      = 1;
+    presentInfo.pSwapchains         = swapChains;
+    presentInfo.pImageIndices       = &m_swapChain.bufferIndex;
+    presentInfo.pResults            = nullptr;
+
+    const VkResult res = vkQueuePresentKHR(m_gpuPresentQueue, &presentInfo);
+
+    #if DEBUG
+    if (res != VK_SUCCESS)
+    {
+        Log::warningF("vkQueuePresentKHR failed: %s", vkResultToString(res));
+    }
+    #else // !DEBUG
+    (void)res;
+    #endif // DEBUG
+}
+
+std::uint32_t VulkanContext::getMemoryTypeFromProperties(const std::uint32_t typeBits, const VkFlags requirementsMask) const
 {
     // Search mem types to find first index with those properties
+    auto bits = typeBits;
     for (std::uint32_t i = 0; i < m_gpuInfo.memoryProperties.memoryTypeCount; ++i)
     {
-        if ((typeBits & 1) == 1)
+        if ((bits & 1) == 1)
         {
             // Type is available, does it match user properties?
             if ((m_gpuInfo.memoryProperties.memoryTypes[i].propertyFlags & requirementsMask) == requirementsMask)
@@ -837,7 +907,7 @@ std::uint32_t VulkanContext::getMemoryTypeFromProperties(std::uint32_t typeBits,
                 return i;
             }
         }
-        typeBits >>= 1;
+        bits >>= 1;
     }
 
     // No memory types matched, return failure
@@ -845,13 +915,14 @@ std::uint32_t VulkanContext::getMemoryTypeFromProperties(std::uint32_t typeBits,
     return UINT32_MAX;
 }
 
-void VulkanContext::setImageLayout(VkCommandBuffer cmdBuff, VkImage image, VkImageAspectFlags aspectMask,
-                                   VkImageLayout oldImageLayout, VkImageLayout newImageLayout) const
+void VulkanContext::changeImageLayout(const CommandBuffer * cmdBuff, VkImage image, const VkImageAspectFlags aspectMask,
+                                      const VkImageLayout oldImageLayout, const VkImageLayout newImageLayout,
+                                      const int baseMipLevel, const int mipLevelCount) const
 {
     assert(image != VK_NULL_HANDLE);
-    assert(m_gpuGraphicsQueue.queue != VK_NULL_HANDLE);
+    assert(cmdBuff != nullptr && cmdBuff->isInRecordingState());
 
-    VkImageMemoryBarrier imageMemBarrier            = {};
+    VkImageMemoryBarrier imageMemBarrier;
     imageMemBarrier.sType                           = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
     imageMemBarrier.pNext                           = nullptr;
     imageMemBarrier.srcAccessMask                   = 0;
@@ -862,8 +933,8 @@ void VulkanContext::setImageLayout(VkCommandBuffer cmdBuff, VkImage image, VkIma
     imageMemBarrier.dstQueueFamilyIndex             = VK_QUEUE_FAMILY_IGNORED;
     imageMemBarrier.image                           = image;
     imageMemBarrier.subresourceRange.aspectMask     = aspectMask;
-    imageMemBarrier.subresourceRange.baseMipLevel   = 0;
-    imageMemBarrier.subresourceRange.levelCount     = 1;
+    imageMemBarrier.subresourceRange.baseMipLevel   = baseMipLevel;
+    imageMemBarrier.subresourceRange.levelCount     = mipLevelCount;
     imageMemBarrier.subresourceRange.baseArrayLayer = 0;
     imageMemBarrier.subresourceRange.layerCount     = 1;
 
@@ -901,7 +972,7 @@ void VulkanContext::setImageLayout(VkCommandBuffer cmdBuff, VkImage image, VkIma
     }
 
     vkCmdPipelineBarrier(
-        /* commandBuffer            = */ cmdBuff,
+        /* commandBuffer            = */ cmdBuff->getVkCmdBufferHandle(),
         /* srcStageMask             = */ VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
         /* dstStageMask             = */ VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
         /* dependencyFlags          = */ 0,
@@ -911,6 +982,122 @@ void VulkanContext::setImageLayout(VkCommandBuffer cmdBuff, VkImage image, VkIma
         /* pBufferMemoryBarriers    = */ nullptr,
         /* imageMemoryBarrierCount  = */ 1,
         /* pImageBarriers           = */ &imageMemBarrier);
+}
+
+void VulkanContext::copyImage(const CommandBuffer * cmdBuff, VkImage srcImage,
+                              VkImage dstImage, const Size2D size) const
+{
+    assert(srcImage != VK_NULL_HANDLE && dstImage != VK_NULL_HANDLE);
+    assert(cmdBuff != nullptr && cmdBuff->isInRecordingState());
+
+    VkImageSubresourceLayers subResource;
+    subResource.aspectMask     = VK_IMAGE_ASPECT_COLOR_BIT;
+    subResource.mipLevel       = 0;
+    subResource.baseArrayLayer = 0;
+    subResource.layerCount     = 1;
+
+    VkImageCopy region;
+    region.srcSubresource = subResource;
+    region.dstSubresource = subResource;
+    region.srcOffset      = { 0, 0, 0 };
+    region.dstOffset      = { 0, 0, 0 };
+    region.extent.width   = size.width;
+    region.extent.height  = size.height;
+    region.extent.depth   = 1;
+
+    vkCmdCopyImage(cmdBuff->getVkCmdBufferHandle(),
+                   srcImage, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                   dstImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                   1, &region);
+}
+
+void VulkanContext::createImage(const VkImageCreateInfo & imageInfo, const VkMemoryPropertyFlags memoryProperties,
+                                VkImage * outImage, VkDeviceMemory * outImageMemory) const
+{
+    assert(outImage != nullptr && outImageMemory != nullptr);
+    VKTB_CHECK(vkCreateImage(m_device, &imageInfo, m_allocationCallbacks, outImage));
+
+    VkMemoryRequirements memRequirements = {};
+    vkGetImageMemoryRequirements(m_device, *outImage, &memRequirements);
+
+    VkMemoryAllocateInfo allocInfo;
+    allocInfo.sType           = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+    allocInfo.pNext           = nullptr;
+    allocInfo.allocationSize  = memRequirements.size;
+    allocInfo.memoryTypeIndex = getMemoryTypeFromProperties(memRequirements.memoryTypeBits, memoryProperties);
+    assert(allocInfo.memoryTypeIndex < UINT32_MAX && "Requested memory type not supported!");
+
+    VKTB_CHECK(vkAllocateMemory(m_device, &allocInfo, m_allocationCallbacks, outImageMemory));
+    VKTB_CHECK(vkBindImageMemory(m_device, *outImage, *outImageMemory, 0));
+}
+
+void VulkanContext::copyBuffer(const CommandBuffer * cmdBuff, VkBuffer srcBuffer,
+                               VkBuffer dstBuffer, const VkDeviceSize sizeToCopy,
+                               const VkDeviceSize srcOffset, const VkDeviceSize dstOffset) const
+{
+    assert(sizeToCopy != 0);
+    assert(srcBuffer != VK_NULL_HANDLE && dstBuffer != VK_NULL_HANDLE);
+    assert(cmdBuff != nullptr && cmdBuff->isInRecordingState());
+
+    VkBufferCopy copyRegion;
+    copyRegion.srcOffset = srcOffset;
+    copyRegion.dstOffset = dstOffset;
+    copyRegion.size      = sizeToCopy;
+    vkCmdCopyBuffer(cmdBuff->getVkCmdBufferHandle(), srcBuffer, dstBuffer, 1, &copyRegion);
+}
+
+void VulkanContext::createBuffer(const VkDeviceSize size, const VkBufferUsageFlags usage,
+                                 const VkMemoryPropertyFlags memoryProperties, VkBuffer * outBuffer,
+                                 VkDeviceMemory * outBufferMemory) const
+{
+    assert(size != 0);
+    assert(outBuffer != nullptr && outBufferMemory != nullptr);
+
+    VkBufferCreateInfo bufferInfo = {};
+    bufferInfo.sType              = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+    bufferInfo.size               = size;
+    bufferInfo.usage              = usage;
+    bufferInfo.sharingMode        = VK_SHARING_MODE_EXCLUSIVE;
+
+    VKTB_CHECK(vkCreateBuffer(m_device, &bufferInfo, m_allocationCallbacks, outBuffer));
+
+    VkMemoryRequirements memRequirements = {};
+    vkGetBufferMemoryRequirements(m_device, *outBuffer, &memRequirements);
+
+    VkMemoryAllocateInfo allocInfo;
+    allocInfo.sType           = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+    allocInfo.pNext           = nullptr;
+    allocInfo.allocationSize  = memRequirements.size;
+    allocInfo.memoryTypeIndex = getMemoryTypeFromProperties(memRequirements.memoryTypeBits, memoryProperties);
+    assert(allocInfo.memoryTypeIndex < UINT32_MAX && "Requested memory type not supported!");
+
+    VKTB_CHECK(vkAllocateMemory(m_device, &allocInfo, m_allocationCallbacks, outBufferMemory));
+    VKTB_CHECK(vkBindBufferMemory(m_device, *outBuffer, *outBufferMemory, 0));
+}
+
+void VulkanContext::cacheFormatProperties()
+{
+    for (Image::Format k : m_formatPropsCache.keys())
+    {
+        if (k == Image::Format::None)
+        {
+            m_formatPropsCache[k]      = {};
+            m_imageFormatPropsCache[k] = {};
+            continue;
+        }
+
+        const VkFormat vkImageFormat = Texture::getVkFormat(k);
+
+        vkGetPhysicalDeviceFormatProperties(m_gpuPhysDevice, vkImageFormat,
+                                            &m_formatPropsCache[k]);
+
+        // VK_IMAGE_TILING_LINEAR:  Texels are laid out in row-major order (mipmaps are not supported).
+        // VK_IMAGE_TILING_OPTIMAL: Texels are laid out in an implementation defined order for optimal access.
+        vkGetPhysicalDeviceImageFormatProperties(m_gpuPhysDevice, vkImageFormat,
+                                                 VK_IMAGE_TYPE_2D, VK_IMAGE_TILING_OPTIMAL,
+                                                 VK_IMAGE_USAGE_SAMPLED_BIT, 0,
+                                                 &m_imageFormatPropsCache[k]);
+    }
 }
 
 void VulkanContext::logInstanceLayerProperties() const
@@ -944,17 +1131,41 @@ Size2D VulkanContext::getRenderWindowSize() const
     return m_renderWindow->getSize();
 }
 
+void VulkanContext::initClass()
+{
+    Log::debugF("---- VulkanContext::initClass ----");
+
+    str512 cwd;
+    Log::debugF("CWD is '%s'", currentPath(&cwd));
+
+    GlslShader::initClass();
+    Texture::initClass();
+}
+
+void VulkanContext::shutdownClass()
+{
+    Log::debugF("---- VulkanContext::shutdownClass ----");
+
+    Texture::shutdownClass();
+    GlslShader::shutdownClass();
+}
+
 // ========================================================
 // class FenceCache:
 // ========================================================
+
+FenceCache::~FenceCache()
+{
+    shutdown();
+}
 
 void FenceCache::shutdown()
 {
     assert(m_allocCount == 0);
     if (!m_cache.empty())
     {
-        auto device   = m_vkContext->getVkDeviceHandle();
-        auto allocCBs = m_vkContext->getAllocationCallbacks();
+        const auto device   = m_vkContext->getVkDeviceHandle();
+        const auto allocCBs = m_vkContext->getAllocationCallbacks();
         for (VkFence fence : m_cache)
         {
             vkDestroyFence(device, fence, allocCBs);
@@ -963,41 +1174,58 @@ void FenceCache::shutdown()
     }
 }
 
-FenceCache::~FenceCache()
+void FenceCache::preallocate(const int numFences)
 {
-    shutdown();
+    assert(numFences <= m_cache.capacity());
+
+    if (m_cache.size() >= numFences)
+    {
+        return;
+    }
+
+    const int count = numFences - m_cache.size();
+    for (int i = 0; i < count; ++i)
+    {
+        m_cache.push(newFence());
+    }
 }
 
-WeakHandle<VkFence> FenceCache::AllocRecyclableFence()
+VkFence FenceCache::newFence()
 {
-    assert(m_allocCount != m_cache.capacity());
+    VkFenceCreateInfo fenceCreateInfo;
+    fenceCreateInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+    fenceCreateInfo.pNext = nullptr;
+    fenceCreateInfo.flags = 0;
+
+    VkFence newFence = VK_NULL_HANDLE;
+    VKTB_CHECK(vkCreateFence(m_vkContext->getVkDeviceHandle(), &fenceCreateInfo,
+                             m_vkContext->getAllocationCallbacks(), &newFence));
+
+    assert(newFence != VK_NULL_HANDLE);
+    return newFence;
+}
+
+VkFence FenceCache::allocRecyclableFence()
+{
+    assert(m_allocCount < m_cache.capacity());
     ++m_allocCount;
 
     if (m_cache.empty())
     {
-        VkFenceCreateInfo fenceCreateInfo;
-        fenceCreateInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
-        fenceCreateInfo.pNext = nullptr;
-        fenceCreateInfo.flags = 0;
-
-        OwnedHandle<VkFence> newFence;
-        VKTB_CHECK(vkCreateFence(m_vkContext->getVkDeviceHandle(), &fenceCreateInfo,
-                                 m_vkContext->getAllocationCallbacks(), &newFence));
-        assert(newFence != VK_NULL_HANDLE);
-        return newFence;
+        return newFence();
     }
     else
     {
-        WeakHandle<VkFence> fence = m_cache.back();
+        auto fence = m_cache.back();
         m_cache.pop();
 
-        // Reset to unsignaled:
+        // Reset to unsignaled
         VKTB_CHECK(vkResetFences(m_vkContext->getVkDeviceHandle(), 1, &fence));
         return fence;
     }
 }
 
-void FenceCache::recycleFence(WeakHandle<VkFence> fence)
+void FenceCache::recycleFence(VkFence fence)
 {
     assert(fence != VK_NULL_HANDLE);
     m_cache.push(fence);

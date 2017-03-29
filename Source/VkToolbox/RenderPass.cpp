@@ -13,15 +13,13 @@
 namespace VkToolbox
 {
 
-RenderPass::RenderPass(WeakRef<const VulkanContext> vkContext)
-    : m_renderPassHandle{ VK_NULL_HANDLE }
-    , m_vkContext{ vkContext }
+RenderPass::RenderPass(const VulkanContext & vkContext)
+    : m_vkContext{ &vkContext }
 {
 }
 
-RenderPass::RenderPass(WeakRef<const VulkanContext> vkContext, const VkRenderPassCreateInfo & rpCreateInfo)
-    : m_renderPassHandle{ VK_NULL_HANDLE }
-    , m_vkContext{ vkContext }
+RenderPass::RenderPass(const VulkanContext & vkContext, const VkRenderPassCreateInfo & rpCreateInfo)
+    : m_vkContext{ &vkContext }
 {
     initialize(rpCreateInfo);
 }
@@ -57,26 +55,17 @@ RenderPass::RenderPass(RenderPass && other)
     , m_vkContext{ other.m_vkContext }
 {
     other.m_renderPassHandle = VK_NULL_HANDLE;
-    other.m_vkContext        = nullptr;
 }
 
 RenderPass & RenderPass::operator = (RenderPass && other)
 {
     shutdown();
 
-    m_renderPassHandle       = other.m_renderPassHandle;
-    m_vkContext              = other.m_vkContext;
+    m_renderPassHandle = other.m_renderPassHandle;
+    m_vkContext        = other.m_vkContext;
 
     other.m_renderPassHandle = VK_NULL_HANDLE;
-    other.m_vkContext        = nullptr;
-
     return *this;
-}
-
-const VulkanContext & RenderPass::getVkContext() const
-{
-    assert(m_vkContext != nullptr);
-    return *m_vkContext;
 }
 
 } // namespace VkToolbox

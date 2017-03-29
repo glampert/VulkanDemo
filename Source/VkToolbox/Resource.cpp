@@ -27,11 +27,10 @@ ResourceId ResourceId::getNull()
 // class Resource:
 // ========================================================
 
-Resource::Resource(WeakRef<const VulkanContext> vkContext, ResourceId id)
+Resource::Resource(const VulkanContext * vkContext, const ResourceId id)
     : m_vkContext{ vkContext }
     , m_resId{ id }
 {
-    assert(m_vkContext != nullptr);
 }
 
 Resource::~Resource()
@@ -42,7 +41,7 @@ Resource::~Resource()
 void Resource::clear()
 {
     m_vkContext = nullptr;
-    m_resId = ResourceId::getNull();
+    m_resId     = ResourceId::getNull();
 }
 
 } // namespace VkToolbox

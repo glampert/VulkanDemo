@@ -32,7 +32,7 @@ public:
     ResourceManager & operator = (const ResourceManager &) = delete;
 
     // Init with the VK device that will own all the resources.
-    explicit ResourceManager(WeakRef<const VulkanContext> vkContext);
+    explicit ResourceManager(const VulkanContext & vkContext);
 
     // Preallocate storage for a number of resources. The parameter is merely a hint.
     void preallocate(int resourceCount);
@@ -90,7 +90,7 @@ private:
 
     using HashIndex = hash_index<ResourceIndex, std::uint64_t>;
 
-    WeakRef<const VulkanContext> m_vkContext;
+    const VulkanContext * m_vkContext;
     std::vector<T> m_resourcesStore;
     HashIndex m_resourcesLookupTable;
 };
@@ -110,16 +110,15 @@ using TextureManager = ResourceManager<Texture>;
 // ========================================================
 
 template<typename T>
-ResourceManager<T>::ResourceManager(WeakRef<const VulkanContext> vkContext)
-    : m_vkContext{ vkContext }
+ResourceManager<T>::ResourceManager(const VulkanContext & vkContext)
+    : m_vkContext{ &vkContext }
 {
-    assert(m_vkContext != nullptr);
 }
 
 template<typename T>
 typename ResourceManager<T>::ResourceIndex ResourceManager<T>::createNewSlot(const ResourceId id)
 {
-    m_resourcesStore.emplace_back(m_vkContext, id);
+    m_resourcesStore.emplace_back(*m_vkContext, id);
     const auto index = narrowCast<ResourceIndex>(m_resourcesStore.size() - 1);
     m_resourcesLookupTable.insert(id.hash.value, index);
     return index;

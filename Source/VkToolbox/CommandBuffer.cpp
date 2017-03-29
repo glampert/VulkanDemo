@@ -17,18 +17,13 @@ namespace VkToolbox
 // class CommandPool:
 // ========================================================
 
-CommandPool::CommandPool(WeakRef<const VulkanContext> vkContext)
-    : m_cmdPoolHandle{ VK_NULL_HANDLE }
-    , m_vkContext{ vkContext }
-    , m_queueFamilyIndex{ -1 }
+CommandPool::CommandPool(const VulkanContext & vkContext)
+    : m_vkContext{ &vkContext }
 {
 }
 
-CommandPool::CommandPool(WeakRef<const VulkanContext> vkContext,
-                         const VkCommandPoolCreateFlags flags,
-                         const int queueFamilyIndex)
-    : m_cmdPoolHandle{ VK_NULL_HANDLE }
-    , m_vkContext{ vkContext }
+CommandPool::CommandPool(const VulkanContext & vkContext, const VkCommandPoolCreateFlags flags, const int queueFamilyIndex)
+    : m_vkContext{ &vkContext }
 {
     initialize(flags, queueFamilyIndex);
 }
@@ -42,11 +37,11 @@ void CommandPool::initialize(const VkCommandPoolCreateFlags flags, const int que
 {
     assert(m_cmdPoolHandle == VK_NULL_HANDLE); // Prevent double init
 
-    VkCommandPoolCreateInfo cpCreateInfo = {};
-    cpCreateInfo.sType                   = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
-    cpCreateInfo.pNext                   = nullptr;
-    cpCreateInfo.queueFamilyIndex        = queueFamilyIndex;
-    cpCreateInfo.flags                   = flags;
+    VkCommandPoolCreateInfo cpCreateInfo;
+    cpCreateInfo.sType            = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+    cpCreateInfo.pNext            = nullptr;
+    cpCreateInfo.queueFamilyIndex = queueFamilyIndex;
+    cpCreateInfo.flags            = flags;
 
     m_queueFamilyIndex = queueFamilyIndex;
     VKTB_CHECK(vkCreateCommandPool(m_vkContext->getVkDeviceHandle(), &cpCreateInfo,
@@ -67,48 +62,42 @@ void CommandPool::shutdown()
     }
 }
 
+void CommandPool::reset() const
+{
+    VKTB_CHECK(vkResetCommandPool(m_vkContext->getVkDeviceHandle(), m_cmdPoolHandle, 0));
+}
+
 CommandPool::CommandPool(CommandPool && other)
     : m_cmdPoolHandle{ other.m_cmdPoolHandle }
     , m_vkContext{ other.m_vkContext }
     , m_queueFamilyIndex{ other.m_queueFamilyIndex }
 {
     other.m_cmdPoolHandle = VK_NULL_HANDLE;
-    other.m_vkContext     = nullptr;
 }
 
 CommandPool & CommandPool::operator = (CommandPool && other)
 {
     shutdown();
 
-    m_cmdPoolHandle       = other.m_cmdPoolHandle;
-    m_vkContext           = other.m_vkContext;
-    m_queueFamilyIndex    = other.m_queueFamilyIndex;
+    m_cmdPoolHandle    = other.m_cmdPoolHandle;
+    m_vkContext        = other.m_vkContext;
+    m_queueFamilyIndex = other.m_queueFamilyIndex;
 
     other.m_cmdPoolHandle = VK_NULL_HANDLE;
-    other.m_vkContext     = nullptr;
-
     return *this;
-}
-
-const VulkanContext & CommandPool::getVkContext() const
-{
-    assert(m_vkContext != nullptr);
-    return *m_vkContext;
 }
 
 // ========================================================
 // class CommandBuffer:
 // ========================================================
 
-CommandBuffer::CommandBuffer(WeakRef<const VulkanContext> vkContext)
-    : m_vkContext{ vkContext }
+CommandBuffer::CommandBuffer(const VulkanContext & vkContext)
+    : m_vkContext{ &vkContext }
 {
 }
 
-CommandBuffer::CommandBuffer(WeakRef<const VulkanContext> vkContext,
-                             const VkCommandBufferLevel lvl,
-                             WeakHandle<VkCommandPool> pool)
-    : m_vkContext{ vkContext }
+CommandBuffer::CommandBuffer(const VulkanContext & vkContext, const VkCommandBufferLevel lvl, VkCommandPool pool)
+    : m_vkContext{ &vkContext }
 {
     initialize(lvl, pool);
 }
@@ -118,19 +107,19 @@ CommandBuffer::~CommandBuffer()
     shutdown();
 }
 
-void CommandBuffer::initialize(const VkCommandBufferLevel lvl, WeakHandle<VkCommandPool> pool)
+void CommandBuffer::initialize(const VkCommandBufferLevel lvl, VkCommandPool pool)
 {
     assert(m_cmdBufferHandle == VK_NULL_HANDLE); // Prevent double init
 
     assert(pool != VK_NULL_HANDLE);
     m_cmdPoolHandle = pool;
 
-    VkCommandBufferAllocateInfo cmdAllocInfo = {};
-    cmdAllocInfo.sType                       = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-    cmdAllocInfo.pNext                       = nullptr;
-    cmdAllocInfo.commandPool                 = m_cmdPoolHandle;
-    cmdAllocInfo.level                       = lvl;
-    cmdAllocInfo.commandBufferCount          = 1;
+    VkCommandBufferAllocateInfo cmdAllocInfo;
+    cmdAllocInfo.sType              = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+    cmdAllocInfo.pNext              = nullptr;
+    cmdAllocInfo.commandPool        = m_cmdPoolHandle;
+    cmdAllocInfo.level              = lvl;
+    cmdAllocInfo.commandBufferCount = 1;
 
     VKTB_CHECK(vkAllocateCommandBuffers(m_vkContext->getVkDeviceHandle(),
                                         &cmdAllocInfo, &m_cmdBufferHandle));
@@ -148,6 +137,11 @@ void CommandBuffer::shutdown()
         m_cmdBufferHandle = VK_NULL_HANDLE;
         m_cmdPoolHandle   = VK_NULL_HANDLE;
     }
+}
+
+void CommandBuffer::reset() const
+{
+    VKTB_CHECK(vkResetCommandBuffer(m_cmdBufferHandle, 0));
 }
 
 CommandBuffer::CommandBuffer(CommandBuffer && other)
@@ -171,7 +165,6 @@ CommandBuffer & CommandBuffer::operator = (CommandBuffer && other)
 
     other.m_cmdBufferHandle = VK_NULL_HANDLE;
     other.m_cmdPoolHandle   = VK_NULL_HANDLE;
-
     return *this;
 }
 
@@ -179,11 +172,11 @@ void CommandBuffer::beginRecording() const
 {
     assert(!isInRecordingState());
 
-    VkCommandBufferBeginInfo cmdBufBeginInfo = {};
-    cmdBufBeginInfo.sType                    = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-    cmdBufBeginInfo.pNext                    = nullptr;
-    cmdBufBeginInfo.flags                    = 0;
-    cmdBufBeginInfo.pInheritanceInfo         = nullptr;
+    VkCommandBufferBeginInfo cmdBufBeginInfo;
+    cmdBufBeginInfo.sType            = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+    cmdBufBeginInfo.pNext            = nullptr;
+    cmdBufBeginInfo.flags            = VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT;
+    cmdBufBeginInfo.pInheritanceInfo = nullptr;
 
     VKTB_CHECK(vkBeginCommandBuffer(m_cmdBufferHandle, &cmdBufBeginInfo));
     m_stateFlags = FlagRecordingState;
@@ -191,34 +184,34 @@ void CommandBuffer::beginRecording() const
 
 void CommandBuffer::endRecording() const
 {
-    assert(!isInExecutionState() && isInRecordingState());
+    assert(!isInSubmissionState() && isInRecordingState());
     VKTB_CHECK(vkEndCommandBuffer(m_cmdBufferHandle));
-    m_stateFlags = FlagExecutionState;
+    m_stateFlags = FlagSubmissionState;
 }
 
-void CommandBuffer::submit(WeakHandle<VkQueue> queue, WeakHandle<VkFence> fence) const
+void CommandBuffer::submit(VkQueue queue, VkFence fence) const
 {
     assert(queue != VK_NULL_HANDLE);
-    const VkCommandBuffer cmdBuffers[] = { m_cmdBufferHandle };
+    assert(isInSubmissionState());
 
-    VkSubmitInfo submitInfo         = {};
-    submitInfo.pNext                = nullptr;
+    VkSubmitInfo submitInfo;
     submitInfo.sType                = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+    submitInfo.pNext                = nullptr;
     submitInfo.waitSemaphoreCount   = 0;
     submitInfo.pWaitSemaphores      = nullptr;
     submitInfo.pWaitDstStageMask    = nullptr;
     submitInfo.commandBufferCount   = 1;
-    submitInfo.pCommandBuffers      = cmdBuffers;
+    submitInfo.pCommandBuffers      = &m_cmdBufferHandle;
     submitInfo.signalSemaphoreCount = 0;
     submitInfo.pSignalSemaphores    = nullptr;
 
     VKTB_CHECK(vkQueueSubmit(queue, 1, &submitInfo, fence));
 }
 
-const VulkanContext & CommandBuffer::getVkContext() const
+void CommandBuffer::submitAndWaitComplete(VkQueue queue) const
 {
-    assert(m_vkContext != nullptr);
-    return *m_vkContext;
+    AutoFence fence{ m_vkContext->getMainFenceCache() };
+    submit(queue, fence);
 }
 
 } // namespace VkToolbox

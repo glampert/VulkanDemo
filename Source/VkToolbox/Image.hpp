@@ -246,6 +246,9 @@ public:
     // squares may range from 2 to 64, as long as it is a power-of-two. Single surface image.
     void initWithCheckerPattern(Size2D size, int squares);
 
+    // Clone the other image into this (base surface only). Can optionally generate mipmap surfaces.
+    void initFromCopy(const Image & copy, bool genMipmapSurfaces);
+
     // Attempt to initialize the image from a file on disk.
     // Will create at least a base surface if the file succeeds to load.
     // Dimensions and pixel format are inferred from the image file.
@@ -401,6 +404,18 @@ inline Image & Image::operator = (Image && other)
 
     other.shutdown();
     return *this;
+}
+
+inline void Image::initFromCopy(const Image & copy, const bool genMipmapSurfaces)
+{
+    assert(copy.isValid());
+    assert(!isInitialized());
+
+    initWithExternalData(copy.getSize(), copy.getFormat(), copy.getPixelDataBaseSurface());
+    if (genMipmapSurfaces)
+    {
+        generateMipmapSurfaces();
+    }
 }
 
 inline bool Image::isInitialized() const

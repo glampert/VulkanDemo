@@ -8,7 +8,11 @@
 // ================================================================================================
 
 #include "Utils.hpp"
+#include "External.hpp"
+
 #include <cstdio>
+#include <direct.h>
+#include <sys/stat.h>
 
 namespace VkToolbox
 {
@@ -63,6 +67,30 @@ std::unique_ptr<char[]> loadTextFile(const char * const inFilename, std::size_t 
 
     std::fclose(fileIn);
     return fileContents;
+}
+
+bool probeFile(const char * const filename)
+{
+    assert(filename != nullptr);
+
+    struct _stat buf;
+    const int result = _stat(filename, &buf);
+    if (result != 0)
+    {
+        return false;
+    }
+    return (buf.st_mode & _S_IFREG) != 0;
+}
+
+const char * currentPath(str * inOutPathStr)
+{
+    assert(inOutPathStr != nullptr);
+
+    char cwd[512];
+    _getcwd(cwd, sizeof(cwd));
+
+    inOutPathStr->set(cwd);
+    return inOutPathStr->c_str();
 }
 
 } // namespace VkToolbox

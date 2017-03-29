@@ -14,6 +14,8 @@
 namespace VkToolbox
 {
 
+#define VKTB_SHADER_SOURCE_PATH "Source/Shaders/"
+
 // ========================================================
 // struct GlslShaderStage:
 // ========================================================
@@ -40,11 +42,11 @@ struct GlslShaderStage final
     Id id = Id{};
     int sourceStart  = 0;
     int sourceLength = 0;
-    OwnedHandle<VkShaderModule> moduleHandle = VK_NULL_HANDLE;
+    VkShaderModule moduleHandle = VK_NULL_HANDLE;
 
     bool isValid() const
     {
-        return moduleHandle != VK_NULL_HANDLE;
+        return (moduleHandle != VK_NULL_HANDLE);
     }
 };
 
@@ -73,6 +75,7 @@ int setDefine(const char * name, const char * value);
 // Set #version directive and #extension directives used by all shaders.
 void setExtension(const char * extName, const char * state);
 void setVersion(int version, bool core, bool fwdCompat);
+void setOptimizations(bool optimize, bool debug);
 
 // Find a global shader #define. Null when not found or bad index.
 const Define * findDefine(const char * name);
@@ -110,7 +113,7 @@ public:
     static void shutdownClass();
 
     // Constructor/destructor:
-    GlslShader(WeakRef<const VulkanContext> vkContext, ResourceId id);
+    GlslShader(const VulkanContext & vkContext, ResourceId id);
     ~GlslShader();
 
     // Movable.
@@ -152,11 +155,11 @@ private:
     void clear() override;
 
     // Creates a single VK shader module from the null-terminated GLSL source code strings.
-    static OwnedHandle<VkShaderModule> createShaderModule(const VulkanContext & vkContext,
-                                                          const VkShaderStageFlagBits shaderType,
-                                                          const char * const shaderDebugName,
-                                                          const array_view<const char *> glslSourceStrings,
-                                                          const array_view<const int> glslSourceStringLengths);
+    static VkShaderModule createShaderModule(const VulkanContext & vkContext,
+                                             const VkShaderStageFlagBits shaderType,
+                                             const char * const shaderDebugName,
+                                             const array_view<const char *> glslSourceStrings,
+                                             const array_view<const int> glslSourceStringLengths);
 
     // Create stages from an annotated GLSL source code string. This looks for the custom tags that
     // split the string for the different shader stages, then creates a VK shader module for each tag found.

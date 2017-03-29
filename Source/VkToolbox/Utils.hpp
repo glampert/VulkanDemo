@@ -14,6 +14,8 @@
 #include <memory>
 #include <type_traits>
 
+class str;
+
 namespace VkToolbox
 {
 
@@ -147,20 +149,6 @@ struct Size3D final
 
 // ========================================================
 
-// Alias to signify that the pointer is a weak reference to some object (e.g. non-owning) and should not be deleted.
-template<typename T>
-using WeakRef = T*;
-
-// Alias to signify that the VK handle is weak (e.g. non-owning) and should not be deleted.
-template<typename H>
-using WeakHandle = H;
-
-// Alias to signify that the VK handle is strong (e.g. owning) and should be deleted by the holder.
-template<typename H>
-using OwnedHandle = H;
-
-// ========================================================
-
 // Test of a C string is a prefix of another. Strings must not be null!
 inline bool strStartsWith(const char * const str, const char * const prefix)
 {
@@ -171,6 +159,12 @@ inline bool strStartsWith(const char * const str, const char * const prefix)
 // Open and load a file into memory, appending a null byte at the end to make it a valid C-style string.
 // outFileSize is mandatory and must not be null.
 std::unique_ptr<char[]> loadTextFile(const char * const inFilename, std::size_t * outFileSize);
+
+// Test if the file exists.
+bool probeFile(const char * filename);
+
+// Get the CWD.
+const char * currentPath(str * inOutPathStr);
 
 // ========================================================
 

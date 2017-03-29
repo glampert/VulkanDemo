@@ -61,10 +61,9 @@ static LRESULT CALLBACK OSWindow_WndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LP
             newSize.width  = LOWORD(lParam);
             newSize.height = HIWORD(lParam);
             window->setSize(newSize, false);
-
             if (window->onResize)
             {
-                window->onResize(*window, newSize);
+                window->onResize(newSize);
             }
             return 0;
         }
@@ -96,7 +95,7 @@ void OSWindow::createWindow(const int width, const int height, const char * cons
     winClass.hIcon         = LoadIcon(nullptr, IDI_APPLICATION);
     winClass.hIconSm       = LoadIcon(nullptr, IDI_WINLOGO);
     winClass.hCursor       = LoadCursor(nullptr, IDC_ARROW);
-    winClass.hbrBackground = reinterpret_cast<HBRUSH>(GetStockObject(GRAY_BRUSH));
+    winClass.hbrBackground = reinterpret_cast<HBRUSH>(GetStockObject(BLACK_BRUSH));
     winClass.lpszMenuName  = nullptr;
     winClass.lpszClassName = title;
 
@@ -154,6 +153,12 @@ void OSWindow::runEventLoop()
     MSG msg = {};
     while (!m_stopEventLoop)
     {
+        if (onRedraw)
+        {
+            onRedraw();
+        }
+
+        // Poll system events:
         while (PeekMessage(&msg, reinterpret_cast<HWND>(getWindowHandle()), 0, 0, PM_REMOVE))
         {
             TranslateMessage(&msg);
@@ -164,7 +169,7 @@ void OSWindow::runEventLoop()
                 if (onClose)
                 {
                     // Give the callback a chance to cancel a quit message.
-                    if (onClose(*this))
+                    if (onClose())
                     {
                         m_stopEventLoop = true;
                         break;
