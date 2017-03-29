@@ -12,6 +12,8 @@
 #include "VkToolbox/OSWindow.hpp"
 #include "VkToolbox/VulkanContext.hpp"
 
+// ========================================================
+
 class VulkanDemoApp
 {
 public:
@@ -29,8 +31,11 @@ public:
     using FactoryFunction = VulkanDemoApp * (*)(const StartupOptions &);
     static void registerAppClass(const char * appClassName, FactoryFunction factoryFunc);
 
+    static void initClass();
+    static void shutdownClass();
+
     VulkanDemoApp(const StartupOptions & options);
-    virtual ~VulkanDemoApp() = default;
+    virtual ~VulkanDemoApp();
     virtual void runLoop();
 
     // Not copyable.
@@ -39,8 +44,11 @@ public:
 
 protected:
 
-    VkToolbox::OSWindow      m_window;
-    VkToolbox::VulkanContext m_vkContext;
+    VkToolbox::OSWindow          m_window;
+    VkToolbox::VulkanContext     m_vkContext;
+
+    static cfg::CVarManager    * sm_cvarManager;
+    static cfg::CommandManager * sm_cmdManager;
 
 private:
 

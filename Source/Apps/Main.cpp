@@ -11,10 +11,10 @@
 
 int main(int argc, const char * argv[])
 {
-    VkToolbox::VulkanContext::initClass();
+    VulkanDemoApp::initClass();
 
     auto appInstance = VulkanDemoApp::create(argc, argv);
     appInstance->runLoop();
 
-    VkToolbox::VulkanContext::shutdownClass();
+    VulkanDemoApp::shutdownClass();
 }

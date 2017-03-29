@@ -76,6 +76,9 @@
     <ClCompile Include="..\Source\Apps\HelloTriangle\VkAppHelloTriangle.cpp">
       <Filter>Source Files\Apps\HelloTriangle</Filter>
     </ClCompile>
+    <ClCompile Include="..\Source\External\lib-cfg\cfg.cpp">
+      <Filter>Source Files\External\Libs</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\Source\VkToolbox\Resource.hpp">
@@ -158,6 +161,9 @@
     </ClInclude>
     <ClInclude Include="..\Source\Apps\VulkanDemoApp.hpp">
       <Filter>Source Files\Apps</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Source\External\lib-cfg\cfg.hpp">
+      <Filter>Source Files\External\Libs</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>

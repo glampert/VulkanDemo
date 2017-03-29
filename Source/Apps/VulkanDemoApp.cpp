@@ -10,6 +10,10 @@
 #include "VulkanDemoApp.hpp"
 
 // ========================================================
+// Static vars/methods:
+
+cfg::CVarManager    * VulkanDemoApp::sm_cvarManager = nullptr;
+cfg::CommandManager * VulkanDemoApp::sm_cmdManager  = nullptr;
 
 std::unique_ptr<VulkanDemoApp> VulkanDemoApp::create(const int argc, const char * argv[])
 {
@@ -51,7 +55,9 @@ void VulkanDemoApp::registerAppClass(const char * appClassName, FactoryFunction 
 const VulkanDemoApp::AppClassFactory * VulkanDemoApp::findAppFactory(const char * const appClassName)
 {
     assert(appClassName != nullptr);
-    for (const auto & f : getFactoriesList())
+
+    const auto & factories = getFactoriesList();
+    for (const auto & f : factories)
     {
         if (std::strcmp(f.appClassName, appClassName) == 0)
         {
@@ -67,6 +73,33 @@ std::vector<VulkanDemoApp::AppClassFactory> & VulkanDemoApp::getFactoriesList()
     return s_factories;
 }
 
+void VulkanDemoApp::initClass()
+{
+    sm_cvarManager = cfg::CVarManager::createInstance();
+    sm_cmdManager  = cfg::CommandManager::createInstance(0, sm_cvarManager);
+
+    VkToolbox::VulkanContext::initClass();
+}
+
+void VulkanDemoApp::shutdownClass()
+{
+    VkToolbox::VulkanContext::shutdownClass();
+
+    if (sm_cmdManager != nullptr)
+    {
+        cfg::CommandManager::destroyInstance(sm_cmdManager);
+        sm_cmdManager = nullptr;
+    }
+    if (sm_cvarManager != nullptr)
+    {
+        cfg::CVarManager::destroyInstance(sm_cvarManager);
+        sm_cvarManager = nullptr;
+    }
+}
+
+// ========================================================
+// Instance methods:
+
 VulkanDemoApp::VulkanDemoApp(const StartupOptions & options)
     : m_window{ { options.initialWindowSize.width,
                   options.initialWindowSize.height,
@@ -74,6 +107,11 @@ VulkanDemoApp::VulkanDemoApp(const StartupOptions & options)
                   options.appTitle } }
     , m_vkContext{ m_window, options.initialWindowSize }
 {
+}
+
+VulkanDemoApp::~VulkanDemoApp()
+{
+    // Nothing atm, just anchors the vtable to this file.
 }
 
 void VulkanDemoApp::runLoop()

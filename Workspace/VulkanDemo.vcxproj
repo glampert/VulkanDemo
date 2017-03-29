@@ -102,6 +102,7 @@
     <ClCompile Include="..\Source\Apps\Main.cpp" />
     <ClCompile Include="..\Source\Apps\VulkanDemoApp.cpp" />
     <ClCompile Include="..\Source\External\External.cpp" />
+    <ClCompile Include="..\Source\External\lib-cfg\cfg.cpp" />
     <ClCompile Include="..\Source\VkToolbox\CommandBuffer.cpp" />
     <ClCompile Include="..\Source\VkToolbox\GlslShader.cpp" />
     <ClCompile Include="..\Source\VkToolbox\Hashing.cpp" />
@@ -123,6 +124,7 @@
     <ClInclude Include="..\Source\External\glslang\glslang\Public\ShaderLang.h" />
     <ClInclude Include="..\Source\External\glslang\SPIRV\GlslangToSpv.h" />
     <ClInclude Include="..\Source\External\hash_index\hash_index.hpp" />
+    <ClInclude Include="..\Source\External\lib-cfg\cfg.hpp" />
     <ClInclude Include="..\Source\External\stb\stb_image.h" />
     <ClInclude Include="..\Source\External\stb\stb_image_resize.h" />
     <ClInclude Include="..\Source\External\stb\stb_image_write.h" />
