@@ -22,3 +22,6 @@
 [submodule "Source/External/lib-cfg"]
 	path = Source/External/lib-cfg
 	url = git@github.com:glampert/lib-cfg.git
+[submodule "Source/External/assimp"]
+	path = Source/External/assimp
+	url = https://github.com/assimp/assimp.git
