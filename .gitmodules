@@ -19,3 +19,6 @@
 [submodule "Source/External/stb"]
 	path = Source/External/stb
 	url = git@github.com:nothings/stb.git
+[submodule "Source/External/lib-cfg"]
+	path = Source/External/lib-cfg
+	url = git@github.com:glampert/lib-cfg.git
