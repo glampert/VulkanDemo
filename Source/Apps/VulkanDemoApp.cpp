@@ -10,6 +10,13 @@
 #include "VulkanDemoApp.hpp"
 
 // ========================================================
+// Global CVars:
+
+cfg::CVar * g_startupWindowWidth    = nullptr;
+cfg::CVar * g_startupWindowHeight   = nullptr;
+cfg::CVar * g_startupMaximizeWindow = nullptr;
+
+// ========================================================
 // Static vars/methods:
 
 cfg::CVarManager    * VulkanDemoApp::sm_cvarManager = nullptr;
@@ -30,7 +37,13 @@ std::unique_ptr<VulkanDemoApp> VulkanDemoApp::create(const int argc, const char 
     #endif // DEBUG
 
     const char * appClassName = argv[1] + 1;
-    const StartupOptions options = { appClassName, { 1024, 768 }, false };
+    sm_cmdManager->execStartupCommandLine(argc - 1, argv + 1); // Skip the first one
+
+    StartupOptions options           = {};
+    options.appTitle                 = appClassName;
+    options.initialWindowSize.width  = static_cast<int>(g_startupWindowWidth->getIntValue());
+    options.initialWindowSize.height = static_cast<int>(g_startupWindowHeight->getIntValue());
+    options.openMaximizedWindow      = g_startupMaximizeWindow->getBoolValue();
 
     return create(appClassName, options);
 }
@@ -77,6 +90,18 @@ void VulkanDemoApp::initClass()
 {
     sm_cvarManager = cfg::CVarManager::createInstance();
     sm_cmdManager  = cfg::CommandManager::createInstance(0, sm_cvarManager);
+
+    cfg::setErrorCallback(
+        [](const char * const message, void *)
+        {
+            VkToolbox::Log::errorF("%s", message);
+        }, 
+    nullptr);
+
+    constexpr auto cvarFlags = (cfg::CVar::Flags::InitOnly | cfg::CVar::Flags::Persistent);
+    g_startupWindowWidth = sm_cvarManager->registerCVarInt("windowWidth", "Startup window width", cvarFlags, 1024, 0, 0);
+    g_startupWindowHeight = sm_cvarManager->registerCVarInt("windowHeight", "Startup window height", cvarFlags, 768, 0, 0);
+    g_startupMaximizeWindow = sm_cvarManager->registerCVarBool("maximizeWindow", "Open window maximized", cvarFlags, false);
 
     VkToolbox::VulkanContext::initClass();
 }

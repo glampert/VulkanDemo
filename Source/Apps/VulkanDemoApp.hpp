@@ -74,3 +74,9 @@ struct AutoRegister_##appClassName                                              
 } appClassName##_registration
 
 // ========================================================
+
+extern cfg::CVar * g_startupWindowWidth;
+extern cfg::CVar * g_startupWindowHeight;
+extern cfg::CVar * g_startupMaximizeWindow;
+
+// ========================================================

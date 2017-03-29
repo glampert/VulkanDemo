@@ -64,6 +64,7 @@
       <AdditionalIncludeDirectories>$(VK_SDK_PATH)/Include;$(SolutionDir)../Source/;$(SolutionDir)../Source/External/;$(SolutionDir)../Source/VkToolbox/;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <PrecompiledHeaderFile />
       <EnableEnhancedInstructionSet>NotSet</EnableEnhancedInstructionSet>
+      <DisableSpecificWarnings>4577;%(DisableSpecificWarnings)</DisableSpecificWarnings>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -86,6 +87,7 @@
       <AdditionalIncludeDirectories>$(VK_SDK_PATH)/Include;$(SolutionDir)../Source/;$(SolutionDir)../Source/External/;$(SolutionDir)../Source/VkToolbox/;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <PrecompiledHeaderFile />
       <EnableEnhancedInstructionSet>NotSet</EnableEnhancedInstructionSet>
+      <DisableSpecificWarnings>4577;%(DisableSpecificWarnings)</DisableSpecificWarnings>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
