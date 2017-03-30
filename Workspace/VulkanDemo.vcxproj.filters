@@ -165,5 +165,8 @@
     <ClInclude Include="..\Source\External\lib-cfg\cfg.hpp">
       <Filter>Source Files\External\Libs</Filter>
     </ClInclude>
+    <ClInclude Include="..\Source\External\assimp\include\assimp\Importer.hpp">
+      <Filter>Source Files\External\Libs</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>
