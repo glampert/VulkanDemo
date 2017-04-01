@@ -1,7 +1,6 @@
 #pragma once
 
 // ================================================================================================
-// -*- C++ -*-
 // File: VkToolbox/FixedSizeArray.hpp
 // Author: Guilherme R. Lampert
 // Created on: 21/02/17

@@ -1,7 +1,6 @@
 #pragma once
 
 // ================================================================================================
-// -*- C++ -*-
 // File: VkToolbox/Pool.hpp
 // Author: Guilherme R. Lampert
 // Created on: 05/01/17
@@ -63,13 +62,13 @@ public:
     void drain();
 
     // Miscellaneous stats queries:
-    int getTotalAllocs()  const;
-    int getTotalFrees()   const;
-    int getObjectsAlive() const;
-    int getSize()         const;
+    int totalAllocs()  const;
+    int totalFrees()   const;
+    int objectsAlive() const;
+    int blockCount()   const;
 
-    static std::size_t getGranularity();
-    static std::size_t getObjectSize();
+    static constexpr std::size_t poolGranularity();
+    static constexpr std::size_t pooledObjectSize();
 
 private:
 
@@ -103,13 +102,13 @@ private:
 // ========================================================
 
 template<typename T, int Granularity>
-Pool<T, Granularity>::~Pool()
+inline Pool<T, Granularity>::~Pool()
 {
     drain();
 }
 
 template<typename T, int Granularity>
-T * Pool<T, Granularity>::allocate()
+inline T * Pool<T, Granularity>::allocate()
 {
     if (m_freeList == nullptr)
     {
@@ -145,7 +144,7 @@ T * Pool<T, Granularity>::allocate()
 }
 
 template<typename T, int Granularity>
-void Pool<T, Granularity>::deallocate(void * ptr)
+inline void Pool<T, Granularity>::deallocate(void * ptr)
 {
     assert(m_objectCount != 0); // Can't deallocate from an empty pool!
     if (ptr == nullptr)
@@ -168,7 +167,7 @@ void Pool<T, Granularity>::deallocate(void * ptr)
 }
 
 template<typename T, int Granularity>
-void Pool<T, Granularity>::drain()
+inline void Pool<T, Granularity>::drain()
 {
     while (m_blockList != nullptr)
     {
@@ -185,37 +184,37 @@ void Pool<T, Granularity>::drain()
 }
 
 template<typename T, int Granularity>
-int Pool<T, Granularity>::getTotalAllocs() const
+inline int Pool<T, Granularity>::totalAllocs() const
 {
     return m_allocCount;
 }
 
 template<typename T, int Granularity>
-int Pool<T, Granularity>::getTotalFrees() const
+inline int Pool<T, Granularity>::totalFrees() const
 {
     return m_allocCount - m_objectCount;
 }
 
 template<typename T, int Granularity>
-int Pool<T, Granularity>::getObjectsAlive() const
+inline int Pool<T, Granularity>::objectsAlive() const
 {
     return m_objectCount;
 }
 
 template<typename T, int Granularity>
-int Pool<T, Granularity>::getSize() const
+inline int Pool<T, Granularity>::blockCount() const
 {
     return m_poolBlockCount;
 }
 
 template<typename T, int Granularity>
-std::size_t Pool<T, Granularity>::getGranularity()
+constexpr std::size_t Pool<T, Granularity>::poolGranularity()
 {
     return Granularity;
 }
 
 template<typename T, int Granularity>
-std::size_t Pool<T, Granularity>::getObjectSize()
+constexpr std::size_t Pool<T, Granularity>::pooledObjectSize()
 {
     return sizeof(T);
 }
@@ -225,19 +224,19 @@ std::size_t Pool<T, Granularity>::getObjectSize()
 // ========================================================
 
 template<typename T>
-T * construct(T * obj, const T & other) // Copy constructor
+inline T * construct(T * obj, const T & other) // Copy constructor
 {
     return ::new(obj) T(other);
 }
 
 template<typename T, typename... Args>
-T * construct(T * obj, Args&&... args) // Parameterized or default constructor
+inline T * construct(T * obj, Args&&... args) // Parameterized or default constructor
 {
     return ::new(obj) T(std::forward<Args>(args)...);
 }
 
 template<typename T>
-void destroy(T * obj)
+inline void destroy(T * obj)
 {
     if (obj != nullptr)
     {

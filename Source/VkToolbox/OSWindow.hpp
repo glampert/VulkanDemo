@@ -1,7 +1,6 @@
 #pragma once
 
 // ================================================================================================
-// -*- C++ -*-
 // File: VkToolbox/OSWindow.hpp
 // Author: Guilherme R. Lampert
 // Created on: 11/01/17
@@ -13,6 +12,10 @@
 
 namespace VkToolbox
 {
+
+// ========================================================
+// class OSWindow:
+// ========================================================
 
 class OSWindow final
 {
@@ -26,7 +29,7 @@ public:
         const char * title;
     };
 
-    // Different types for each kind of handle.
+    // Different types for each kind of handle to avoid implicit conversions.
     struct HWindowImpl;
     struct HInstanceImpl;
 
@@ -45,17 +48,13 @@ public:
     void setStopEventLoop(bool stop);
 
     // Window queries:
-    HWindow getWindowHandle() const;
-    HInstance getInstanceHandle() const;
-    const CreateParameters & getCreationParameters() const;
+    HWindow windowHandle() const;
+    HInstance instanceHandle() const;
+    const CreateParameters & creationParameters() const;
 
     // Current window dimensions (taking into account user resizing).
-    Size2D getSize() const;
+    Size2D size() const;
     void setSize(Size2D newSize, bool generateEvent = true);
-
-    // User data pointer we can optionally store:
-    template<typename T> T * getUserPointer() const;
-    template<typename T> void setUserPointer(T * ptr);
 
     // Window/system events:
     std::function<bool()>             onClose;  // Called when the user tries to close the window.
@@ -69,20 +68,15 @@ private:
     void destroyWindow();
 
     // System handles:
-    HWindow   m_hWind;
-    HInstance m_hInst;
-
-    // Pointer to some user structure - this can be retrieved in the window callbacks.
-    void * m_userPtr;
+    HWindow   m_hWind = nullptr;
+    HInstance m_hInst = nullptr;
 
     // Creation parameters / settings, etc:
     const CreateParameters m_createParams;
-    Size2D m_currSize;
-    bool m_stopEventLoop;
+    Size2D m_currSize      = {0,0};
+    bool   m_stopEventLoop = false;
 };
 
-// ========================================================
-// OSWindow inline methods:
 // ========================================================
 
 inline OSWindow::~OSWindow()
@@ -95,36 +89,26 @@ inline void OSWindow::setStopEventLoop(const bool stop)
     m_stopEventLoop = stop;
 }
 
-inline OSWindow::HWindow OSWindow::getWindowHandle() const
+inline OSWindow::HWindow OSWindow::windowHandle() const
 {
     return m_hWind;
 }
 
-inline OSWindow::HInstance OSWindow::getInstanceHandle() const
+inline OSWindow::HInstance OSWindow::instanceHandle() const
 {
     return m_hInst;
 }
 
-inline const OSWindow::CreateParameters & OSWindow::getCreationParameters() const
+inline const OSWindow::CreateParameters & OSWindow::creationParameters() const
 {
     return m_createParams;
 }
 
-inline Size2D OSWindow::getSize() const
+inline Size2D OSWindow::size() const
 {
     return m_currSize;
 }
 
-template<typename T>
-inline T * OSWindow::getUserPointer() const
-{
-    return static_cast<T *>(m_userPtr);
-}
-
-template<typename T>
-inline void OSWindow::setUserPointer(T * ptr)
-{
-    m_userPtr = ptr;
-}
+// ========================================================
 
 } // namespace VkToolbox

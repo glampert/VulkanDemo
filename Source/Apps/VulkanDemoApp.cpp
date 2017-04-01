@@ -1,6 +1,5 @@
 
 // ================================================================================================
-// -*- C++ -*-
 // File: Apps/VulkanDemoApp.cpp
 // Author: Guilherme R. Lampert
 // Created on: 29/03/17
@@ -15,6 +14,7 @@
 cfg::CVar * g_startupWindowWidth    = nullptr;
 cfg::CVar * g_startupWindowHeight   = nullptr;
 cfg::CVar * g_startupMaximizeWindow = nullptr;
+cfg::CVar * g_smoketestRunOnly      = nullptr;
 
 // ========================================================
 // Static vars/methods:
@@ -24,11 +24,6 @@ cfg::CommandManager * VulkanDemoApp::sm_cmdManager  = nullptr;
 
 std::unique_ptr<VulkanDemoApp> VulkanDemoApp::create(const int argc, const char * argv[])
 {
-    if (argc < 2)
-    {
-        VkToolbox::Log::fatalF("Not enough arguments! Use: VulkanDemo.exe -AppClassName [options]");
-    }
-
     #if DEBUG
     for (int i = 0; i < argc; ++i)
     {
@@ -36,8 +31,18 @@ std::unique_ptr<VulkanDemoApp> VulkanDemoApp::create(const int argc, const char 
     }
     #endif // DEBUG
 
-    const char * appClassName = argv[1] + 1;
-    sm_cmdManager->execStartupCommandLine(argc - 1, argv + 1); // Skip the first one
+    const char * appClassName;
+    if (argc < 2)
+    {
+        VkToolbox::Log::warningF("Not enough arguments! Use: VulkanDemo.exe -AppClassName [options]");
+        VkToolbox::Log::warningF("Running default demo application...");
+        appClassName = "VkAppHelloTriangle";
+    }
+    else
+    {
+        appClassName = argv[1] + 1;
+        sm_cmdManager->execStartupCommandLine(argc - 1, argv + 1); // Skip the first one
+    }
 
     StartupOptions options           = {};
     options.appTitle                 = appClassName;
@@ -62,14 +67,14 @@ std::unique_ptr<VulkanDemoApp> VulkanDemoApp::create(const char * const appClass
 void VulkanDemoApp::registerAppClass(const char * appClassName, FactoryFunction factoryFunc)
 {
     assert(!findAppFactory(appClassName));
-    getFactoriesList().push_back({ appClassName, factoryFunc });
+    factoriesList().push_back({ appClassName, factoryFunc });
 }
 
 const VulkanDemoApp::AppClassFactory * VulkanDemoApp::findAppFactory(const char * const appClassName)
 {
     assert(appClassName != nullptr);
 
-    const auto & factories = getFactoriesList();
+    const auto & factories = factoriesList();
     for (const auto & f : factories)
     {
         if (std::strcmp(f.appClassName, appClassName) == 0)
@@ -80,7 +85,7 @@ const VulkanDemoApp::AppClassFactory * VulkanDemoApp::findAppFactory(const char 
     return nullptr;
 }
 
-std::vector<VulkanDemoApp::AppClassFactory> & VulkanDemoApp::getFactoriesList()
+std::vector<VulkanDemoApp::AppClassFactory> & VulkanDemoApp::factoriesList()
 {
     static std::vector<AppClassFactory> s_factories;
     return s_factories;
@@ -99,9 +104,10 @@ void VulkanDemoApp::initClass()
     nullptr);
 
     constexpr auto cvarFlags = (cfg::CVar::Flags::InitOnly | cfg::CVar::Flags::Persistent);
-    g_startupWindowWidth = sm_cvarManager->registerCVarInt("windowWidth", "Startup window width", cvarFlags, 1024, 0, 0);
-    g_startupWindowHeight = sm_cvarManager->registerCVarInt("windowHeight", "Startup window height", cvarFlags, 768, 0, 0);
-    g_startupMaximizeWindow = sm_cvarManager->registerCVarBool("maximizeWindow", "Open window maximized", cvarFlags, false);
+    g_startupWindowWidth     = sm_cvarManager->registerCVarInt("windowWidth", "Startup window width", cvarFlags, 1024, 0, 0);
+    g_startupWindowHeight    = sm_cvarManager->registerCVarInt("windowHeight", "Startup window height", cvarFlags, 768, 0, 0);
+    g_startupMaximizeWindow  = sm_cvarManager->registerCVarBool("maximizeWindow", "Open window maximized", cvarFlags, false);
+    g_smoketestRunOnly       = sm_cvarManager->registerCVarBool("smoketest", "Run a smoke test frame and quit", cvarFlags, false);
 
     VkToolbox::VulkanContext::initClass();
 }
@@ -109,6 +115,11 @@ void VulkanDemoApp::initClass()
 void VulkanDemoApp::shutdownClass()
 {
     VkToolbox::VulkanContext::shutdownClass();
+
+    g_startupWindowWidth    = nullptr;
+    g_startupWindowHeight   = nullptr;
+    g_startupMaximizeWindow = nullptr;
+    g_smoketestRunOnly      = nullptr;
 
     if (sm_cmdManager != nullptr)
     {
@@ -132,6 +143,21 @@ VulkanDemoApp::VulkanDemoApp(const StartupOptions & options)
                   options.appTitle } }
     , m_vkContext{ m_window, options.initialWindowSize }
 {
+    m_window.onResize = [this](const VkToolbox::Size2D newSize)
+    {
+        onResizeWindow(newSize);
+    };
+
+    static bool s_smoketestRun = g_smoketestRunOnly->getBoolValue();
+    m_window.onRedraw = [this]()
+    {
+        onFrameUpdate();
+        if (s_smoketestRun)
+        {
+            m_window.setStopEventLoop(true);
+            VkToolbox::Log::debugF("Smoke test frame completed - quitting.");
+        }
+    };
 }
 
 VulkanDemoApp::~VulkanDemoApp()
@@ -139,10 +165,21 @@ VulkanDemoApp::~VulkanDemoApp()
     // Nothing atm, just anchors the vtable to this file.
 }
 
-void VulkanDemoApp::runLoop()
+void VulkanDemoApp::onRunMainLoop()
 {
     m_window.runEventLoop();
     m_vkContext.waitGpuIdle();
+}
+
+void VulkanDemoApp::onFrameUpdate()
+{
+    // Implemented by the derived class.
+}
+
+void VulkanDemoApp::onResizeWindow(const VkToolbox::Size2D newSize)
+{
+    VkToolbox::Log::debugF("Resizing window to {w=%i, h=%i}", newSize.width, newSize.height);
+    // Not handled here.
 }
 
 // ========================================================

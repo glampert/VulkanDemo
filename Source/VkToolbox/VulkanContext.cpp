@@ -1,6 +1,5 @@
 
 // ================================================================================================
-// -*- C++ -*-
 // File: VkToolbox/VulkanContext.cpp
 // Author: Guilherme R. Lampert
 // Created on: 11/01/17
@@ -60,6 +59,17 @@ VulkanContext::VulkanContext(const OSWindow & window, const Size2D fbSize, const
     Log::debugF("Initializing Vulkan API context...");
 
     m_swapChain.framebufferSize = fbSize;
+
+    for (std::size_t i = 0; i < m_clearValues.size(); ++i)
+    {
+        m_clearValues[i].color.float32[0] = 0.0f;
+        m_clearValues[i].color.float32[1] = 0.0f;
+        m_clearValues[i].color.float32[2] = 0.0f;
+        m_clearValues[i].color.float32[3] = 1.0f;
+
+        m_clearValues[i].depthStencil.depth   = 0.0f;
+        m_clearValues[i].depthStencil.stencil = 0;
+    }
 
     initInstanceLayerProperties();
     initInstance();
@@ -331,8 +341,8 @@ void VulkanContext::initSwapChainExtensions()
     #if defined(WIN32) || defined(WIN64)
     VkWin32SurfaceCreateInfoKHR surfCreateInfo = {};
     surfCreateInfo.sType     = VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR;
-    surfCreateInfo.hinstance = reinterpret_cast<HINSTANCE>(m_renderWindow->getInstanceHandle());
-    surfCreateInfo.hwnd      = reinterpret_cast<HWND>(m_renderWindow->getWindowHandle());
+    surfCreateInfo.hinstance = reinterpret_cast<HINSTANCE>(m_renderWindow->instanceHandle());
+    surfCreateInfo.hwnd      = reinterpret_cast<HWND>(m_renderWindow->windowHandle());
     VKTB_CHECK(vkCreateWin32SurfaceKHR(m_instance, &surfCreateInfo, m_allocationCallbacks, &m_renderSurface));
     assert(m_renderSurface != VK_NULL_HANDLE);
     #endif // WIN32 || WIN64
@@ -655,7 +665,7 @@ void VulkanContext::initDepthBuffer()
     memAllocInfo.allocationSize = memReqs.size;
 
     // Use the memory properties to determine the type of memory required:
-    memAllocInfo.memoryTypeIndex = getMemoryTypeFromProperties(memReqs.memoryTypeBits, /* requirementsMask = */ 0);
+    memAllocInfo.memoryTypeIndex = memoryTypeFromProperties(memReqs.memoryTypeBits, /* requirementsMask = */ 0);
     assert(memAllocInfo.memoryTypeIndex < UINT32_MAX);
 
     // Allocate the memory:
@@ -666,7 +676,7 @@ void VulkanContext::initDepthBuffer()
     VKTB_CHECK(vkBindImageMemory(m_device, m_depthBuffer.image, m_depthBuffer.memory, 0));
 
     // Set the image layout to depth stencil optimal:
-    changeImageLayout(&m_mainTextureStagingCmdBuffer, m_depthBuffer.image, viewInfo.subresourceRange.aspectMask,
+    changeImageLayout(m_mainTextureStagingCmdBuffer, m_depthBuffer.image, viewInfo.subresourceRange.aspectMask,
                       VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
 
     // And finally create the image view.
@@ -893,7 +903,7 @@ void VulkanContext::endFrame(array_view<const VkCommandBuffer> submitBuffers, Vk
     #endif // DEBUG
 }
 
-std::uint32_t VulkanContext::getMemoryTypeFromProperties(const std::uint32_t typeBits, const VkFlags requirementsMask) const
+std::uint32_t VulkanContext::memoryTypeFromProperties(const std::uint32_t typeBits, const VkFlags requirementsMask) const
 {
     // Search mem types to find first index with those properties
     auto bits = typeBits;
@@ -915,12 +925,12 @@ std::uint32_t VulkanContext::getMemoryTypeFromProperties(const std::uint32_t typ
     return UINT32_MAX;
 }
 
-void VulkanContext::changeImageLayout(const CommandBuffer * cmdBuff, VkImage image, const VkImageAspectFlags aspectMask,
+void VulkanContext::changeImageLayout(const CommandBuffer & cmdBuff, VkImage image, const VkImageAspectFlags aspectMask,
                                       const VkImageLayout oldImageLayout, const VkImageLayout newImageLayout,
                                       const int baseMipLevel, const int mipLevelCount) const
 {
     assert(image != VK_NULL_HANDLE);
-    assert(cmdBuff != nullptr && cmdBuff->isInRecordingState());
+    assert(cmdBuff.isInRecordingState());
 
     VkImageMemoryBarrier imageMemBarrier;
     imageMemBarrier.sType                           = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
@@ -972,7 +982,7 @@ void VulkanContext::changeImageLayout(const CommandBuffer * cmdBuff, VkImage ima
     }
 
     vkCmdPipelineBarrier(
-        /* commandBuffer            = */ cmdBuff->getVkCmdBufferHandle(),
+        /* commandBuffer            = */ cmdBuff.commandBufferHandle(),
         /* srcStageMask             = */ VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
         /* dstStageMask             = */ VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
         /* dependencyFlags          = */ 0,
@@ -984,11 +994,11 @@ void VulkanContext::changeImageLayout(const CommandBuffer * cmdBuff, VkImage ima
         /* pImageBarriers           = */ &imageMemBarrier);
 }
 
-void VulkanContext::copyImage(const CommandBuffer * cmdBuff, VkImage srcImage,
+void VulkanContext::copyImage(const CommandBuffer & cmdBuff, VkImage srcImage,
                               VkImage dstImage, const Size2D size) const
 {
     assert(srcImage != VK_NULL_HANDLE && dstImage != VK_NULL_HANDLE);
-    assert(cmdBuff != nullptr && cmdBuff->isInRecordingState());
+    assert(cmdBuff.isInRecordingState());
 
     VkImageSubresourceLayers subResource;
     subResource.aspectMask     = VK_IMAGE_ASPECT_COLOR_BIT;
@@ -1005,7 +1015,7 @@ void VulkanContext::copyImage(const CommandBuffer * cmdBuff, VkImage srcImage,
     region.extent.height  = size.height;
     region.extent.depth   = 1;
 
-    vkCmdCopyImage(cmdBuff->getVkCmdBufferHandle(),
+    vkCmdCopyImage(cmdBuff.commandBufferHandle(),
                    srcImage, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
                    dstImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                    1, &region);
@@ -1024,38 +1034,38 @@ void VulkanContext::createImage(const VkImageCreateInfo & imageInfo, const VkMem
     allocInfo.sType           = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
     allocInfo.pNext           = nullptr;
     allocInfo.allocationSize  = memRequirements.size;
-    allocInfo.memoryTypeIndex = getMemoryTypeFromProperties(memRequirements.memoryTypeBits, memoryProperties);
+    allocInfo.memoryTypeIndex = memoryTypeFromProperties(memRequirements.memoryTypeBits, memoryProperties);
     assert(allocInfo.memoryTypeIndex < UINT32_MAX && "Requested memory type not supported!");
 
     VKTB_CHECK(vkAllocateMemory(m_device, &allocInfo, m_allocationCallbacks, outImageMemory));
     VKTB_CHECK(vkBindImageMemory(m_device, *outImage, *outImageMemory, 0));
 }
 
-void VulkanContext::copyBuffer(const CommandBuffer * cmdBuff, VkBuffer srcBuffer,
+void VulkanContext::copyBuffer(const CommandBuffer & cmdBuff, VkBuffer srcBuffer,
                                VkBuffer dstBuffer, const VkDeviceSize sizeToCopy,
                                const VkDeviceSize srcOffset, const VkDeviceSize dstOffset) const
 {
     assert(sizeToCopy != 0);
     assert(srcBuffer != VK_NULL_HANDLE && dstBuffer != VK_NULL_HANDLE);
-    assert(cmdBuff != nullptr && cmdBuff->isInRecordingState());
+    assert(cmdBuff.isInRecordingState());
 
     VkBufferCopy copyRegion;
     copyRegion.srcOffset = srcOffset;
     copyRegion.dstOffset = dstOffset;
     copyRegion.size      = sizeToCopy;
-    vkCmdCopyBuffer(cmdBuff->getVkCmdBufferHandle(), srcBuffer, dstBuffer, 1, &copyRegion);
+    vkCmdCopyBuffer(cmdBuff.commandBufferHandle(), srcBuffer, dstBuffer, 1, &copyRegion);
 }
 
-void VulkanContext::createBuffer(const VkDeviceSize size, const VkBufferUsageFlags usage,
+void VulkanContext::createBuffer(const VkDeviceSize sizeBytes, const VkBufferUsageFlags usage,
                                  const VkMemoryPropertyFlags memoryProperties, VkBuffer * outBuffer,
                                  VkDeviceMemory * outBufferMemory) const
 {
-    assert(size != 0);
+    assert(sizeBytes != 0);
     assert(outBuffer != nullptr && outBufferMemory != nullptr);
 
     VkBufferCreateInfo bufferInfo = {};
     bufferInfo.sType              = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-    bufferInfo.size               = size;
+    bufferInfo.size               = sizeBytes;
     bufferInfo.usage              = usage;
     bufferInfo.sharingMode        = VK_SHARING_MODE_EXCLUSIVE;
 
@@ -1068,7 +1078,7 @@ void VulkanContext::createBuffer(const VkDeviceSize size, const VkBufferUsageFla
     allocInfo.sType           = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
     allocInfo.pNext           = nullptr;
     allocInfo.allocationSize  = memRequirements.size;
-    allocInfo.memoryTypeIndex = getMemoryTypeFromProperties(memRequirements.memoryTypeBits, memoryProperties);
+    allocInfo.memoryTypeIndex = memoryTypeFromProperties(memRequirements.memoryTypeBits, memoryProperties);
     assert(allocInfo.memoryTypeIndex < UINT32_MAX && "Requested memory type not supported!");
 
     VKTB_CHECK(vkAllocateMemory(m_device, &allocInfo, m_allocationCallbacks, outBufferMemory));
@@ -1086,7 +1096,7 @@ void VulkanContext::cacheFormatProperties()
             continue;
         }
 
-        const VkFormat vkImageFormat = Texture::getVkFormat(k);
+        const VkFormat vkImageFormat = Texture::toVkImageFormat(k);
 
         vkGetPhysicalDeviceFormatProperties(m_gpuPhysDevice, vkImageFormat,
                                             &m_formatPropsCache[k]);
@@ -1125,10 +1135,10 @@ void VulkanContext::logInstanceLayerProperties() const
     Log::debugF("------------------------------------------");
 }
 
-Size2D VulkanContext::getRenderWindowSize() const
+Size2D VulkanContext::renderWindowSize() const
 {
     assert(m_renderWindow != nullptr);
-    return m_renderWindow->getSize();
+    return m_renderWindow->size();
 }
 
 void VulkanContext::initClass()
@@ -1164,8 +1174,8 @@ void FenceCache::shutdown()
     assert(m_allocCount == 0);
     if (!m_cache.empty())
     {
-        const auto device   = m_vkContext->getVkDeviceHandle();
-        const auto allocCBs = m_vkContext->getAllocationCallbacks();
+        const auto device   = m_vkContext->deviceHandle();
+        const auto allocCBs = m_vkContext->allocationCallbacks();
         for (VkFence fence : m_cache)
         {
             vkDestroyFence(device, fence, allocCBs);
@@ -1198,10 +1208,8 @@ VkFence FenceCache::newFence()
     fenceCreateInfo.flags = 0;
 
     VkFence newFence = VK_NULL_HANDLE;
-    VKTB_CHECK(vkCreateFence(m_vkContext->getVkDeviceHandle(), &fenceCreateInfo,
-                             m_vkContext->getAllocationCallbacks(), &newFence));
-
-    assert(newFence != VK_NULL_HANDLE);
+    VKTB_CHECK(vkCreateFence(m_vkContext->deviceHandle(), &fenceCreateInfo,
+                             m_vkContext->allocationCallbacks(), &newFence));
     return newFence;
 }
 
@@ -1220,7 +1228,7 @@ VkFence FenceCache::allocRecyclableFence()
         m_cache.pop();
 
         // Reset to unsignaled
-        VKTB_CHECK(vkResetFences(m_vkContext->getVkDeviceHandle(), 1, &fence));
+        VKTB_CHECK(vkResetFences(m_vkContext->deviceHandle(), 1, &fence));
         return fence;
     }
 }
@@ -1241,7 +1249,7 @@ bool AutoFence::wait(const std::uint64_t timeout)
     assert(isWaitable());
     assert(m_cache != nullptr);
 
-    const VkResult res = vkWaitForFences(m_cache->getVkContext().getVkDeviceHandle(),
+    const VkResult res = vkWaitForFences(m_cache->context().deviceHandle(),
                                          1, &m_fenceHandle, VK_TRUE, timeout);
 
     if (res == VK_TIMEOUT)
@@ -1269,7 +1277,7 @@ bool AutoFence::isSignaled() const
     }
 
     assert(m_cache != nullptr);
-    const VkResult res = vkGetFenceStatus(m_cache->getVkContext().getVkDeviceHandle(), m_fenceHandle);
+    const VkResult res = vkGetFenceStatus(m_cache->context().deviceHandle(), m_fenceHandle);
 
     if (res == VK_SUCCESS)
     {

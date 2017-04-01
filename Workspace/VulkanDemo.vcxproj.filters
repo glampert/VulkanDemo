@@ -23,6 +23,9 @@
     <Filter Include="Source Files\Apps\ColoredCube">
       <UniqueIdentifier>{95a63839-f520-4b0f-a38b-a562a2963ba0}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Source Files\Shaders">
+      <UniqueIdentifier>{b26460c9-61c0-44b6-9694-ef6ddeb70ad9}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\Source\VkToolbox\Resource.cpp">
@@ -168,5 +171,19 @@
     <ClInclude Include="..\Source\External\assimp\include\assimp\Importer.hpp">
       <Filter>Source Files\External\Libs</Filter>
     </ClInclude>
+    <ClInclude Include="..\Source\VkToolbox\Buffers.hpp">
+      <Filter>Source Files\VkToolbox</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Source\VkToolbox\DescriptorSets.hpp">
+      <Filter>Source Files\VkToolbox</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Source\VkToolbox\PipelineState.hpp">
+      <Filter>Source Files\VkToolbox</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="..\Source\Shaders\BuiltInTriangleTest.glsl">
+      <Filter>Source Files\Shaders</Filter>
+    </None>
   </ItemGroup>
 </Project>

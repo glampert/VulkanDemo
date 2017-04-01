@@ -1,7 +1,6 @@
 #pragma once
 
 // ================================================================================================
-// -*- C++ -*-
 // File: VkToolbox/GlslShader.hpp
 // Author: Guilherme R. Lampert
 // Created on: 03/01/17
@@ -78,19 +77,19 @@ void setVersion(int version, bool core, bool fwdCompat);
 void setOptimizations(bool optimize, bool debug);
 
 // Find a global shader #define. Null when not found or bad index.
-const Define * findDefine(const char * name);
-const Define * getDefine(int index);
+const Define * findDefineByName(const char * name);
+const Define * findDefineByIndex(int index);
 
 // Number of #defines only.
-int getDefinesCount();
+int definesCount();
 
 // Combined string with all #defines, #extensions and #version.
-const char * getAllDefinesString();
-int getAllDefinesStringLength();
+const char * allDefinesString();
+int allDefinesStringLength();
 
 // Set/get the include path appended to all shader #includes. Initially empty.
 void setShaderIncludePath(const char * pathEndingWithSlash);
-const char * getShaderIncludePath();
+const char * shaderIncludePath();
 
 // Removes all define, extension, version directives and clears the default include path.
 void shutdown();
@@ -136,18 +135,18 @@ public:
     void setSourceCode(const char * glslSource);
 
     // Read-only access to the GLSL source code (owned by the shader instance).
-    const char * getSourceCode() const;
+    const char * sourceCode() const;
 
     // Shader stage access:
-    int getStageCount() const;
-    const GlslShaderStage & getStage(int index) const;
+    int stageCount() const;
+    const GlslShaderStage & stage(int index) const;
     const GlslShaderStage * findStageById(GlslShaderStage::Id id) const;
 
     // Create the pipeline state structs for Vulkan shader setup. Assumes the default "main"
     // entry point for std GLSL stages. Size of the out array must be >= GlslShaderStage::MaxStages.
     // Return value is the number of stages actually written.
-    int getVkPipelineStages(array_view<VkPipelineShaderStageCreateInfo> outStages) const;
-    int getVkPipelineStages(std::array<VkPipelineShaderStageCreateInfo, GlslShaderStage::MaxStages> * outStages) const;
+    int pipelineStages(array_view<VkPipelineShaderStageCreateInfo> outStages) const;
+    int pipelineStages(std::array<VkPipelineShaderStageCreateInfo, GlslShaderStage::MaxStages> * outStages) const;
 
 private:
 
@@ -186,17 +185,17 @@ inline bool GlslShader::isLoaded() const
     return (m_sourceCode != nullptr && !m_stages.empty());
 }
 
-inline const char * GlslShader::getSourceCode() const
+inline const char * GlslShader::sourceCode() const
 {
     return m_sourceCode.get();
 }
 
-inline int GlslShader::getStageCount() const
+inline int GlslShader::stageCount() const
 {
     return m_stages.size();
 }
 
-inline const GlslShaderStage & GlslShader::getStage(const int index) const
+inline const GlslShaderStage & GlslShader::stage(const int index) const
 {
     return m_stages[index];
 }
@@ -213,10 +212,10 @@ inline const GlslShaderStage * GlslShader::findStageById(const GlslShaderStage::
     return nullptr;
 }
 
-inline int GlslShader::getVkPipelineStages(std::array<VkPipelineShaderStageCreateInfo, GlslShaderStage::MaxStages> * outStages) const
+inline int GlslShader::pipelineStages(std::array<VkPipelineShaderStageCreateInfo, GlslShaderStage::MaxStages> * outStages) const
 {
     assert(outStages != nullptr);
-    return getVkPipelineStages(make_array_view(*outStages));
+    return pipelineStages(make_array_view(*outStages));
 }
 
 // ========================================================

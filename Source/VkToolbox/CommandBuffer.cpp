@@ -1,6 +1,5 @@
 
 // ================================================================================================
-// -*- C++ -*-
 // File: VkToolbox/CommandBuffer.cpp
 // Author: Guilherme R. Lampert
 // Created on: 24/03/17
@@ -35,7 +34,7 @@ CommandPool::~CommandPool()
 
 void CommandPool::initialize(const VkCommandPoolCreateFlags flags, const int queueFamilyIndex)
 {
-    assert(m_cmdPoolHandle == VK_NULL_HANDLE); // Prevent double init
+    assert(!isInitialized()); // Prevent double init
 
     VkCommandPoolCreateInfo cpCreateInfo;
     cpCreateInfo.sType            = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
@@ -44,8 +43,8 @@ void CommandPool::initialize(const VkCommandPoolCreateFlags flags, const int que
     cpCreateInfo.flags            = flags;
 
     m_queueFamilyIndex = queueFamilyIndex;
-    VKTB_CHECK(vkCreateCommandPool(m_vkContext->getVkDeviceHandle(), &cpCreateInfo,
-                                   m_vkContext->getAllocationCallbacks(), &m_cmdPoolHandle));
+    VKTB_CHECK(vkCreateCommandPool(m_vkContext->deviceHandle(), &cpCreateInfo,
+                                   m_vkContext->allocationCallbacks(), &m_cmdPoolHandle));
 
     assert(m_cmdPoolHandle != VK_NULL_HANDLE);
 }
@@ -54,37 +53,15 @@ void CommandPool::shutdown()
 {
     if (m_cmdPoolHandle != VK_NULL_HANDLE)
     {
-        vkDestroyCommandPool(m_vkContext->getVkDeviceHandle(), m_cmdPoolHandle,
-                             m_vkContext->getAllocationCallbacks());
-
-        m_cmdPoolHandle    = VK_NULL_HANDLE;
-        m_queueFamilyIndex = -1;
+        vkDestroyCommandPool(m_vkContext->deviceHandle(), m_cmdPoolHandle,
+                             m_vkContext->allocationCallbacks());
+        m_cmdPoolHandle = VK_NULL_HANDLE;
     }
 }
 
 void CommandPool::reset() const
 {
-    VKTB_CHECK(vkResetCommandPool(m_vkContext->getVkDeviceHandle(), m_cmdPoolHandle, 0));
-}
-
-CommandPool::CommandPool(CommandPool && other)
-    : m_cmdPoolHandle{ other.m_cmdPoolHandle }
-    , m_vkContext{ other.m_vkContext }
-    , m_queueFamilyIndex{ other.m_queueFamilyIndex }
-{
-    other.m_cmdPoolHandle = VK_NULL_HANDLE;
-}
-
-CommandPool & CommandPool::operator = (CommandPool && other)
-{
-    shutdown();
-
-    m_cmdPoolHandle    = other.m_cmdPoolHandle;
-    m_vkContext        = other.m_vkContext;
-    m_queueFamilyIndex = other.m_queueFamilyIndex;
-
-    other.m_cmdPoolHandle = VK_NULL_HANDLE;
-    return *this;
+    VKTB_CHECK(vkResetCommandPool(m_vkContext->deviceHandle(), m_cmdPoolHandle, 0));
 }
 
 // ========================================================
@@ -109,21 +86,18 @@ CommandBuffer::~CommandBuffer()
 
 void CommandBuffer::initialize(const VkCommandBufferLevel lvl, VkCommandPool pool)
 {
-    assert(m_cmdBufferHandle == VK_NULL_HANDLE); // Prevent double init
-
+    assert(!isInitialized()); // Prevent double init
     assert(pool != VK_NULL_HANDLE);
-    m_cmdPoolHandle = pool;
 
     VkCommandBufferAllocateInfo cmdAllocInfo;
     cmdAllocInfo.sType              = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
     cmdAllocInfo.pNext              = nullptr;
-    cmdAllocInfo.commandPool        = m_cmdPoolHandle;
+    cmdAllocInfo.commandPool        = pool;
     cmdAllocInfo.level              = lvl;
     cmdAllocInfo.commandBufferCount = 1;
 
-    VKTB_CHECK(vkAllocateCommandBuffers(m_vkContext->getVkDeviceHandle(),
-                                        &cmdAllocInfo, &m_cmdBufferHandle));
-
+    m_cmdPoolHandle = pool;
+    VKTB_CHECK(vkAllocateCommandBuffers(m_vkContext->deviceHandle(), &cmdAllocInfo, &m_cmdBufferHandle));
     assert(m_cmdBufferHandle != VK_NULL_HANDLE);
 }
 
@@ -131,9 +105,7 @@ void CommandBuffer::shutdown()
 {
     if (m_cmdBufferHandle != VK_NULL_HANDLE)
     {
-        vkFreeCommandBuffers(m_vkContext->getVkDeviceHandle(),
-                             m_cmdPoolHandle, 1, &m_cmdBufferHandle);
-
+        vkFreeCommandBuffers(m_vkContext->deviceHandle(), m_cmdPoolHandle, 1, &m_cmdBufferHandle);
         m_cmdBufferHandle = VK_NULL_HANDLE;
         m_cmdPoolHandle   = VK_NULL_HANDLE;
     }
@@ -142,30 +114,7 @@ void CommandBuffer::shutdown()
 void CommandBuffer::reset() const
 {
     VKTB_CHECK(vkResetCommandBuffer(m_cmdBufferHandle, 0));
-}
-
-CommandBuffer::CommandBuffer(CommandBuffer && other)
-    : m_cmdBufferHandle{ other.m_cmdBufferHandle }
-    , m_cmdPoolHandle{ other.m_cmdPoolHandle }
-    , m_vkContext{ other.m_vkContext }
-    , m_stateFlags{ other.m_stateFlags }
-{
-    other.m_cmdBufferHandle = VK_NULL_HANDLE;
-    other.m_cmdPoolHandle   = VK_NULL_HANDLE;
-}
-
-CommandBuffer & CommandBuffer::operator = (CommandBuffer && other)
-{
-    shutdown();
-
-    m_cmdBufferHandle = other.m_cmdBufferHandle;
-    m_cmdPoolHandle   = other.m_cmdPoolHandle;
-    m_vkContext       = other.m_vkContext;
-    m_stateFlags      = other.m_stateFlags;
-
-    other.m_cmdBufferHandle = VK_NULL_HANDLE;
-    other.m_cmdPoolHandle   = VK_NULL_HANDLE;
-    return *this;
+    m_stateFlags = 0;
 }
 
 void CommandBuffer::beginRecording() const
@@ -210,7 +159,7 @@ void CommandBuffer::submit(VkQueue queue, VkFence fence) const
 
 void CommandBuffer::submitAndWaitComplete(VkQueue queue) const
 {
-    AutoFence fence{ m_vkContext->getMainFenceCache() };
+    AutoFence fence{ m_vkContext->mainFenceCache() };
     submit(queue, fence);
 }
 

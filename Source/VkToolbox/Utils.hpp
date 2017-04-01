@@ -1,7 +1,6 @@
 #pragma once
 
 // ================================================================================================
-// -*- C++ -*-
 // File: VkToolbox/Utils.hpp
 // Author: Guilherme R. Lampert
 // Created on: 07/01/17
@@ -19,9 +18,43 @@ class str;
 namespace VkToolbox
 {
 
-// ========================================================
+constexpr float PI       = 3.1415926535897931f;
+constexpr float HalfPI   = PI / 2.0f;
+constexpr float TwoPI    = 2.0f * PI;
+constexpr float DegToRad = PI / 180.0f;
+constexpr float RadToDeg = 180.0f / PI;
 
-// Test if types T and U are both signed.
+// Width and height pair.
+struct Size2D final
+{
+    int width;
+    int height;
+};
+
+// Width, height and depth triplet.
+struct Size3D final
+{
+    int width;
+    int height;
+    int depth;
+};
+
+namespace CT
+{
+
+// Compile-time maximum of an arbitrary number of values:
+template<typename T>
+constexpr T maxOf2(T a, T b) { return (a > b) ? a : b; }
+
+template<typename T>
+constexpr T maxOfN(T x) { return x; }
+
+template<typename T, typename... Args>
+constexpr T maxOfN(T x, Args... args) { return maxOf2(x, maxOfN(args...)); }
+
+} // namespace CT
+
+// Test if types T and U are both signed, at compile time.
 template<typename T, typename U>
 using IsSameSignedness = typename std::integral_constant<bool, std::is_signed<T>::value == std::is_signed<U>::value>::type;
 
@@ -44,8 +77,6 @@ inline T narrowCast(const U u)
     return t;
 }
 
-// ========================================================
-
 // Statically infer the length in T elements of the C-style array.
 template<typename T, std::size_t Size>
 constexpr std::size_t arrayLength(const T (&)[Size])
@@ -53,12 +84,21 @@ constexpr std::size_t arrayLength(const T (&)[Size])
     return Size;
 }
 
-// Clamp the input value between min and max (inclusive range).
+// Clamp the input value between min and max (inclusive range) - in-place version.
 template<typename T>
 inline void clamp(T * inOutVal, const T minVal, const T maxVal)
 {
     if      ((*inOutVal) < minVal) { (*inOutVal) = minVal; }
     else if ((*inOutVal) > maxVal) { (*inOutVal) = maxVal; }
+}
+
+// Returns the new clamped value.
+template<typename T>
+inline T clamp(const T inVal, const T minVal, const T maxVal)
+{
+    if      (inVal < minVal) { return minVal; }
+    else if (inVal > maxVal) { return maxVal; }
+    else                     { return inVal;  }
 }
 
 // Test if an integer is a power of two. Always false if the number is negative.
@@ -92,8 +132,6 @@ inline T roundUpToPowerOfTwo(T x)
     }
     return ++x;
 }
-
-// ========================================================
 
 // Adds the minimum extra needed to the size for pointer alignment.
 // This size can then be used to malloc some memory and then have
@@ -130,25 +168,6 @@ inline T * alignPtr(const T * ptr, const std::size_t alignment)
     return userPtr;
 }
 
-// ========================================================
-
-// Width and height pair.
-struct Size2D final
-{
-    int width;
-    int height;
-};
-
-// Width, height and depth triplet.
-struct Size3D final
-{
-    int width;
-    int height;
-    int depth;
-};
-
-// ========================================================
-
 // Test of a C string is a prefix of another. Strings must not be null!
 inline bool strStartsWith(const char * const str, const char * const prefix)
 {
@@ -165,7 +184,5 @@ bool probeFile(const char * filename);
 
 // Get the CWD.
 const char * currentPath(str * inOutPathStr);
-
-// ========================================================
 
 } // namespace VkToolbox

@@ -1,7 +1,6 @@
 #pragma once
 
 // ================================================================================================
-// -*- C++ -*-
 // File: VkToolbox/Log.hpp
 // Author: Guilherme R. Lampert
 // Created on: 07/01/17
@@ -38,11 +37,11 @@ enum class VerbosityLevel
 
 // Default = Debug
 void setVerbosityLevel(VerbosityLevel lvl);
-VerbosityLevel getVerbosityLevel();
+VerbosityLevel verbosityLevel();
 
 // Default = stdout
 void setOutputStream(FILE* stream);
-FILE* getOutputStream();
+FILE* outputStream();
 
 void debugF(VKTB_PRINTF_LIKE const char * fmt, ...);
 void warningF(VKTB_PRINTF_LIKE const char * fmt, ...);

@@ -1,6 +1,5 @@
 
 // ================================================================================================
-// -*- C++ -*-
 // File: Apps/Main.cpp
 // Author: Guilherme R. Lampert
 // Created on: 29/03/17
@@ -14,7 +13,7 @@ int main(int argc, const char * argv[])
     VulkanDemoApp::initClass();
 
     auto appInstance = VulkanDemoApp::create(argc, argv);
-    appInstance->runLoop();
+    appInstance->onRunMainLoop();
 
     VulkanDemoApp::shutdownClass();
 }

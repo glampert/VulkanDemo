@@ -1,7 +1,6 @@
 #pragma once
 
 // ================================================================================================
-// -*- C++ -*-
 // File: VkToolbox/Hashing.hpp
 // Author: Guilherme R. Lampert
 // Created on: 03/01/17

@@ -1,6 +1,5 @@
 
 // ================================================================================================
-// -*- C++ -*-
 // File: Apps/ColoredCube/VkAppColoredCube.cpp
 // Author: Guilherme R. Lampert
 // Created on: 29/03/17
@@ -13,10 +12,6 @@ class VkAppColoredCube final
     : public VulkanDemoApp
 {
 public:
-    static VulkanDemoApp * createInstance(const StartupOptions & options)
-    {
-        return new VkAppColoredCube{ options };
-    }
 
     // TODO
     using VulkanDemoApp::VulkanDemoApp;

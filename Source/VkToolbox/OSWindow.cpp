@@ -1,6 +1,5 @@
 
 // ================================================================================================
-// -*- C++ -*-
 // File: VkToolbox/OSWindow.cpp
 // Author: Guilherme R. Lampert
 // Created on: 11/01/17
@@ -20,12 +19,7 @@ namespace VkToolbox
 {
 
 OSWindow::OSWindow(const CreateParameters & params)
-    : m_hWind{ nullptr }
-    , m_hInst{ nullptr }
-    , m_userPtr{ nullptr }
-    , m_createParams{ params }
-    , m_currSize{ 0,0 }
-    , m_stopEventLoop{ false }
+    : m_createParams{ params }
 {
     createWindow(params.width, params.height, params.title,
                  params.openMaximized, &m_hWind, &m_hInst);
@@ -159,7 +153,7 @@ void OSWindow::runEventLoop()
         }
 
         // Poll system events:
-        while (PeekMessage(&msg, reinterpret_cast<HWND>(getWindowHandle()), 0, 0, PM_REMOVE))
+        while (PeekMessage(&msg, reinterpret_cast<HWND>(windowHandle()), 0, 0, PM_REMOVE))
         {
             TranslateMessage(&msg);
             DispatchMessage(&msg);
@@ -195,7 +189,7 @@ void OSWindow::setSize(const Size2D newSize, const bool generateEvent)
         m_currSize.width  = wr.right  - wr.left;
         m_currSize.height = wr.bottom - wr.top;
 
-        SetWindowPos(reinterpret_cast<HWND>(getWindowHandle()), HWND_TOP, 0, 0,
+        SetWindowPos(reinterpret_cast<HWND>(windowHandle()), HWND_TOP, 0, 0,
                      m_currSize.width, m_currSize.height, (SWP_NOMOVE | SWP_NOREPOSITION));
     }
     else

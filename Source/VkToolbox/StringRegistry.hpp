@@ -1,7 +1,6 @@
 #pragma once
 
 // ================================================================================================
-// -*- C++ -*-
 // File: VkToolbox/StringRegistry.hpp
 // Author: Guilherme R. Lampert
 // Created on: 05/01/17
@@ -45,14 +44,14 @@ public:
     StringRegistry() = default;
     ~StringRegistry() { shutdown(); }
 
-    const str * get(const char * const key)
+    const str * access(const char * const key)
     {
         assert(key != nullptr);
         const str_ref keyRefStr{ key };
-        return get(&keyRefStr);
+        return access(&keyRefStr);
     }
 
-    const str * get(const str * const key)
+    const str * access(const str * const key)
     {
         assert(key != nullptr);
 

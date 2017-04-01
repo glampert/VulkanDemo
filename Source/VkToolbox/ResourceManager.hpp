@@ -1,7 +1,6 @@
 #pragma once
 
 // ================================================================================================
-// -*- C++ -*-
 // File: VkToolbox/ResourceManager.hpp
 // Author: Guilherme R. Lampert
 // Created on: 03/01/17
@@ -68,23 +67,23 @@ public:
     void unregisterAll();
 
     // Number of registered resource slots.
-    int getResourceCount() const;
+    int resourceCount() const;
 
     // Deref a slot index to get the resource object. Asserts if the slot index is invalid.
     // NOTE: It is not safe to store references to the returned object
     //       since the underlaying store might be moved or reallocated!
-    const T & getResourceRef(ResourceIndex resIndex) const;
+    const T & resourceRef(ResourceIndex resIndex) const;
 
     // Access to the Vulkan instance that owns all the graphics resources.
-    const VulkanContext & getVkContext() const;
+    const VulkanContext & context() const;
 
 private:
 
     // Expand the resource store by one item and also register the new index into the LUT.
     ResourceIndex createNewSlot(ResourceId id);
 
-    // Internal variant of getResourceRef() for load/unload mutable calls.
-    T & getResourceRefMutable(ResourceIndex resIndex);
+    // Internal variant of resourceRef() for load/unload mutable calls.
+    T & mutableResourceRef(ResourceIndex resIndex);
 
 private:
 
@@ -141,7 +140,7 @@ bool ResourceManager<T>::findLoaded(const ResourceId inResId, ResourceIndex * ou
 
     const auto index = m_resourcesLookupTable.find(inResId.hash.value, inResId, m_resourcesStore,
                                                    [](const ResourceId & key, const T & item) {
-                                                       return key == item.getId();
+                                                       return key == item.resourceId();
                                                    });
 
     if (index == HashIndex::null_index)
@@ -168,7 +167,7 @@ bool ResourceManager<T>::findOrLoad(const ResourceId inResId, ResourceIndex * ou
 
     auto index = m_resourcesLookupTable.find(inResId.hash.value, inResId, m_resourcesStore,
                                              [](const ResourceId & key, const T & item) {
-                                                 return key == item.getId();
+                                                 return key == item.resourceId();
                                              });
 
     if (index == HashIndex::null_index) // Register the slot if needed
@@ -190,7 +189,7 @@ bool ResourceManager<T>::registerSlot(const ResourceId inResId, ResourceIndex * 
 
     auto index = m_resourcesLookupTable.find(inResId.hash.value, inResId, m_resourcesStore,
                                              [](const ResourceId & key, const T & item) {
-                                                 return key == item.getId();
+                                                 return key == item.resourceId();
                                              });
 
     // Register new or just return existing:
@@ -209,7 +208,7 @@ bool ResourceManager<T>::isRegistered(const ResourceId inResId) const
     assert(!inResId.isNull());
     const auto index = m_resourcesLookupTable.find(inResId.hash.value, inResId, m_resourcesStore,
                                                    [](const ResourceId & key, const T & item) {
-                                                       return key == item.getId();
+                                                       return key == item.resourceId();
                                                    });
     return index != HashIndex::null_index;
 }
@@ -217,19 +216,19 @@ bool ResourceManager<T>::isRegistered(const ResourceId inResId) const
 template<typename T>
 bool ResourceManager<T>::isLoaded(const ResourceIndex resIndex) const
 {
-    return getResourceRef(resIndex).isLoaded();
+    return resourceRef(resIndex).isLoaded();
 }
 
 template<typename T>
 bool ResourceManager<T>::reload(const ResourceIndex resIndex)
 {
-    return getResourceRefMutable(resIndex).load();
+    return mutableResourceRef(resIndex).load();
 }
 
 template<typename T>
 void ResourceManager<T>::unload(const ResourceIndex resIndex)
 {
-    getResourceRefMutable(resIndex).unload();
+    mutableResourceRef(resIndex).unload();
 }
 
 template<typename T>
@@ -272,27 +271,27 @@ void ResourceManager<T>::unregisterAll()
 }
 
 template<typename T>
-int ResourceManager<T>::getResourceCount() const
+int ResourceManager<T>::resourceCount() const
 {
     return narrowCast<int>(m_resourcesStore.size());
 }
 
 template<typename T>
-const T & ResourceManager<T>::getResourceRef(const ResourceIndex resIndex) const
+const T & ResourceManager<T>::resourceRef(const ResourceIndex resIndex) const
 {
     assert(resIndex < m_resourcesStore.size());
     return m_resourcesStore[resIndex];
 }
 
 template<typename T>
-T & ResourceManager<T>::getResourceRefMutable(ResourceIndex resIndex)
+T & ResourceManager<T>::mutableResourceRef(ResourceIndex resIndex)
 {
     assert(resIndex < m_resourcesStore.size());
     return m_resourcesStore[resIndex];
 }
 
 template<typename T>
-const VulkanContext & ResourceManager<T>::getVkContext() const
+const VulkanContext & ResourceManager<T>::context() const
 {
     return *m_vkContext;
 }

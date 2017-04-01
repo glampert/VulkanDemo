@@ -1,7 +1,6 @@
 #pragma once
 
 // ================================================================================================
-// -*- C++ -*-
 // File: Apps/VulkanDemoApp.hpp
 // Author: Guilherme R. Lampert
 // Created on: 29/03/17
@@ -11,7 +10,10 @@
 #include "VkToolbox/Utils.hpp"
 #include "VkToolbox/OSWindow.hpp"
 #include "VkToolbox/VulkanContext.hpp"
+#include "VkToolbox/StringRegistry.hpp"
 
+// ========================================================
+// class VulkanDemoApp:
 // ========================================================
 
 class VulkanDemoApp
@@ -36,9 +38,11 @@ public:
 
     VulkanDemoApp(const StartupOptions & options);
     virtual ~VulkanDemoApp();
-    virtual void runLoop();
 
-    // Not copyable.
+    virtual void onRunMainLoop();
+    virtual void onFrameUpdate();
+    virtual void onResizeWindow(const VkToolbox::Size2D newSize);
+
     VulkanDemoApp(const VulkanDemoApp &) = delete;
     VulkanDemoApp & operator = (const VulkanDemoApp &) = delete;
 
@@ -46,6 +50,7 @@ protected:
 
     VkToolbox::OSWindow          m_window;
     VkToolbox::VulkanContext     m_vkContext;
+    VkToolbox::StringRegistry    m_strRegistry;
 
     static cfg::CVarManager    * sm_cvarManager;
     static cfg::CommandManager * sm_cmdManager;
@@ -59,24 +64,29 @@ private:
     };
 
     static const AppClassFactory * findAppFactory(const char * appClassName);
-    static std::vector<AppClassFactory> & getFactoriesList();
+    static std::vector<AppClassFactory> & factoriesList();
 };
 
 // ========================================================
 
-#define VULKAN_DEMO_REGISTER_APP(appClassName)                                         \
-struct AutoRegister_##appClassName                                                     \
-{                                                                                      \
-    AutoRegister_##appClassName()                                                      \
-    {                                                                                  \
-        VulkanDemoApp::registerAppClass(#appClassName, &appClassName::createInstance); \
-    }                                                                                  \
-} appClassName##_registration
+#define VULKAN_DEMO_REGISTER_APP(appClassName)                                                          \
+    static VulkanDemoApp * appClassName##_createInstance(const VulkanDemoApp::StartupOptions & options) \
+    {                                                                                                   \
+        return new appClassName{ options };                                                             \
+    }                                                                                                   \
+    struct AutoRegister_##appClassName                                                                  \
+    {                                                                                                   \
+        AutoRegister_##appClassName()                                                                   \
+        {                                                                                               \
+            VulkanDemoApp::registerAppClass(#appClassName, &appClassName##_createInstance);             \
+        }                                                                                               \
+    } appClassName##_registration
 
 // ========================================================
 
 extern cfg::CVar * g_startupWindowWidth;
 extern cfg::CVar * g_startupWindowHeight;
 extern cfg::CVar * g_startupMaximizeWindow;
+extern cfg::CVar * g_smoketestRunOnly;
 
 // ========================================================

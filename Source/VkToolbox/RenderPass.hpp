@@ -1,7 +1,6 @@
 #pragma once
 
 // ================================================================================================
-// -*- C++ -*-
 // File: VkToolbox/RenderPass.hpp
 // Author: Guilherme R. Lampert
 // Created on: 24/03/17
@@ -28,23 +27,16 @@ public:
     RenderPass(const VulkanContext & vkContext, const VkRenderPassCreateInfo & rpCreateInfo);
     ~RenderPass();
 
+    RenderPass(const RenderPass &) = delete;
+    RenderPass & operator = (const RenderPass &) = delete;
+
     void initialize(const VkRenderPassCreateInfo & rpCreateInfo);
     void shutdown();
     bool isInitialized() const;
 
-    // Movable.
-    RenderPass(RenderPass && other);
-    RenderPass & operator = (RenderPass && other);
+    VkRenderPass renderPassHandle() const;
+    const VulkanContext & context() const;
 
-    // But not copyable.
-    RenderPass(const RenderPass &) = delete;
-    RenderPass & operator = (const RenderPass &) = delete;
-
-    // Accessors:
-    VkRenderPass getVkRenderPassHandle() const;
-    const VulkanContext & getVkContext() const;
-
-    // Implicit conversion to VkRenderPass.
     operator VkRenderPass() const { return m_renderPassHandle; }
 
 private:
@@ -60,12 +52,12 @@ inline bool RenderPass::isInitialized() const
     return (m_renderPassHandle != VK_NULL_HANDLE);
 }
 
-inline VkRenderPass RenderPass::getVkRenderPassHandle() const
+inline VkRenderPass RenderPass::renderPassHandle() const
 {
     return m_renderPassHandle;
 }
 
-inline const VulkanContext & RenderPass::getVkContext() const
+inline const VulkanContext & RenderPass::context() const
 {
     return *m_vkContext;
 }

@@ -1,6 +1,5 @@
 
 // ================================================================================================
-// -*- C++ -*-
 // File: VkToolbox/ResourceManager.cpp
 // Author: Guilherme R. Lampert
 // Created on: 18/02/17

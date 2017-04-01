@@ -1,6 +1,5 @@
 
 // ================================================================================================
-// -*- C++ -*-
 // File: VkToolbox/GlslShader.cpp
 // Author: Guilherme R. Lampert
 // Created on: 03/01/17
@@ -25,7 +24,7 @@ static int      s_glslVersionUsed   = 150;
 static bool     s_glslFwdCompatible = false;
 static EProfile s_glslProfileUsed   = ECompatibilityProfile;
 
-static const TBuiltInResource * GlslGetBuiltInResources()
+static const TBuiltInResource * GlslBuiltInResources()
 {
     static TBuiltInResource s_resources{};
     static bool s_initialized = false;
@@ -202,7 +201,7 @@ public:
         str512 fullFilePath;
         if (appendDefaultPath)
         {
-            fullFilePath = GlslShaderPreproc::getShaderIncludePath();
+            fullFilePath = GlslShaderPreproc::shaderIncludePath();
             fullFilePath += headerName;
         }
         else
@@ -268,7 +267,7 @@ static bool GlslToSPIRV(const VkShaderStageFlagBits shaderType,
     const auto messages = EShMessages(EShMsgSpvRules | EShMsgVulkanRules);
 
     // Pre-process and parse:
-    if (!shader.parse(GlslGetBuiltInResources(), s_glslVersionUsed, s_glslProfileUsed,
+    if (!shader.parse(GlslBuiltInResources(), s_glslVersionUsed, s_glslProfileUsed,
                       false, s_glslFwdCompatible, messages, myIncluder))
     {
         Log::errorF("*** Failed to compile GLSL shader '%s'. Error log: ***", shaderDebugName);
@@ -396,11 +395,11 @@ bool GlslShader::reloadCurrent()
         return false;
     }
 
-    const char * const name = getId().getName();
+    const char * const name = resourceId().c_str();
 
     GlslShaderStageArray newStages{};
     const auto sourceLen = std::strlen(m_sourceCode.get());
-    if (!createShaderStages(getVkContext(), m_sourceCode.get(), sourceLen, name, &newStages))
+    if (!createShaderStages(context(), m_sourceCode.get(), sourceLen, name, &newStages))
     {
         Log::warningF("Failed to create stages for shader '%s'", name);
         return false;
@@ -424,7 +423,7 @@ bool GlslShader::load()
         return false;
     }
 
-    const char * const name = getId().getName();
+    const char * const name = resourceId().c_str();
 
     std::size_t newSourceSize = 0;
     std::unique_ptr<char[]> newSourceCode = loadTextFile(name, &newSourceSize);
@@ -435,7 +434,7 @@ bool GlslShader::load()
     }
 
     GlslShaderStageArray newStages{};
-    if (!createShaderStages(getVkContext(), newSourceCode.get(), newSourceSize, name, &newStages))
+    if (!createShaderStages(context(), newSourceCode.get(), newSourceSize, name, &newStages))
     {
         Log::warningF("Failed to create stages for shader '%s'", name);
         return false;
@@ -454,8 +453,8 @@ void GlslShader::unload()
     // Release the old stage modules if needed:
     if (!m_stages.empty())
     {
-        const auto device   = getVkContext().getVkDeviceHandle();
-        const auto allocCBs = getVkContext().getAllocationCallbacks();
+        const auto device   = context().deviceHandle();
+        const auto allocCBs = context().allocationCallbacks();
         for (int s = 0; s < m_stages.size(); ++s)
         {
             vkDestroyShaderModule(device, m_stages[s].moduleHandle, allocCBs);
@@ -478,7 +477,7 @@ void GlslShader::clear()
     m_stages.clear();
 }
 
-int GlslShader::getVkPipelineStages(array_view<VkPipelineShaderStageCreateInfo> outStages) const
+int GlslShader::pipelineStages(array_view<VkPipelineShaderStageCreateInfo> outStages) const
 {
     assert(outStages != nullptr);
     assert(outStages.size() >= GlslShaderStage::MaxStages);
@@ -518,8 +517,8 @@ VkShaderModule GlslShader::createShaderModule(const VulkanContext & vkContext,
     shaderModuleInfo.pCode    = spirvBinary.data();
 
     VkShaderModule shaderModule = VK_NULL_HANDLE;
-    const VkResult result = vkCreateShaderModule(vkContext.getVkDeviceHandle(), &shaderModuleInfo,
-                                                 vkContext.getAllocationCallbacks(), &shaderModule);
+    const VkResult result = vkCreateShaderModule(vkContext.deviceHandle(), &shaderModuleInfo,
+                                                 vkContext.allocationCallbacks(), &shaderModule);
 
     if (result != VK_SUCCESS || shaderModule == VK_NULL_HANDLE)
     {
@@ -626,10 +625,10 @@ bool GlslShader::createShaderStages(const VulkanContext & vkContext,
         const auto sourceLength = static_cast<int>(std::strlen(splitSources[s]));
 
         // Default macros/directives just get appended to the beginning as an extra source string.
-        const char * srcAndMacros[] = { GlslShaderPreproc::getAllDefinesString(), splitSources[s] };
+        const char * srcAndMacros[] = { GlslShaderPreproc::allDefinesString(), splitSources[s] };
         const array_view<const char *> glslSourceStrings{ srcAndMacros };
 
-        const int srcAndMacrosLengths[] = { GlslShaderPreproc::getAllDefinesStringLength(), sourceLength };
+        const int srcAndMacrosLengths[] = { GlslShaderPreproc::allDefinesStringLength(), sourceLength };
         const array_view<const int> glslSourceStringLengths{ srcAndMacrosLengths };
 
         VkShaderModule moduleHandle = createShaderModule(vkContext, GlslShaderStage::VkShaderStageFlags[s],
@@ -653,8 +652,8 @@ bool GlslShader::createShaderStages(const VulkanContext & vkContext,
     // Throw everything away and return false if a shader stage failed.
     if (failedCount != 0)
     {
-        const auto device   = vkContext.getVkDeviceHandle();
-        const auto allocCBs = vkContext.getAllocationCallbacks();
+        const auto device   = vkContext.deviceHandle();
+        const auto allocCBs = vkContext.allocationCallbacks();
 
         for (int s = 0; s < outStages->size(); ++s)
         {
@@ -677,7 +676,7 @@ void GlslShader::initClass()
     Log::debugF("---- GlslShader::initClass ----");
 
     glslang::InitializeProcess();
-    GlslGetBuiltInResources(); // Force creating the shared instance.
+    GlslBuiltInResources(); // Force creating the shared instance.
 
     if (VulkanContext::isDebug())
     {
@@ -748,7 +747,7 @@ static Define * setDefineInternal(const char * const name)
 
     Define newDefine;
     newDefine.name  = name;
-    newDefine.index = getDefinesCount();
+    newDefine.index = definesCount();
 
     s_allDefinesStrUpToDate = false;
 
@@ -839,21 +838,21 @@ void setOptimizations(const bool optimize, const bool debug)
     s_pragmaDebug    = debug;
 }
 
-const Define * findDefine(const char * const name)
+const Define * findDefineByName(const char * const name)
 {
     return findDefineInternal(name, false);
 }
 
-const Define * getDefine(const int index)
+const Define * findDefineByIndex(const int index)
 {
-    if (index < 0 || index > getDefinesCount())
+    if (index < 0 || index > definesCount())
     {
         return nullptr;
     }
     return &s_globalDefines[index];
 }
 
-const char * getAllDefinesString()
+const char * allDefinesString()
 {
     if (!s_allDefinesStrUpToDate)
     {
@@ -901,13 +900,13 @@ const char * getAllDefinesString()
     return s_allDefinesString.c_str();
 }
 
-int getAllDefinesStringLength()
+int allDefinesStringLength()
 {
-    getAllDefinesString(); // Make sure the cached string is updated if needed!
+    allDefinesString(); // Make sure the cached string is updated if needed!
     return s_allDefinesString.length();
 }
 
-int getDefinesCount()
+int definesCount()
 {
     return narrowCast<int>(s_globalDefines.size());
 }
@@ -935,7 +934,7 @@ void setShaderIncludePath(const char * const pathEndingWithSlash)
     s_globalShaderIncPath = pathEndingWithSlash;
 }
 
-const char * getShaderIncludePath()
+const char * shaderIncludePath()
 {
     return s_globalShaderIncPath.c_str();
 }

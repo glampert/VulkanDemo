@@ -1,6 +1,5 @@
 
 // ================================================================================================
-// -*- C++ -*-
 // File: VkToolbox/Resource.cpp
 // Author: Guilherme R. Lampert
 // Created on: 03/01/17
@@ -16,22 +15,15 @@ namespace VkToolbox
 // struct ResourceId:
 // ========================================================
 
-ResourceId ResourceId::getNull()
+ResourceId ResourceId::null()
 {
-    static const str    s_nullName;
-    static const Hash64 s_nullHash;
-    return { &s_nullName, s_nullHash };
+    static const str s_nullName;
+    return { &s_nullName, Hash64{} };
 }
 
 // ========================================================
 // class Resource:
 // ========================================================
-
-Resource::Resource(const VulkanContext * vkContext, const ResourceId id)
-    : m_vkContext{ vkContext }
-    , m_resId{ id }
-{
-}
 
 Resource::~Resource()
 {
@@ -41,7 +33,7 @@ Resource::~Resource()
 void Resource::clear()
 {
     m_vkContext = nullptr;
-    m_resId     = ResourceId::getNull();
+    m_resId     = ResourceId::null();
 }
 
 } // namespace VkToolbox

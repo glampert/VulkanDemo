@@ -1,6 +1,5 @@
 
 // ================================================================================================
-// -*- C++ -*-
 // File: VkToolbox/RenderPass.cpp
 // Author: Guilherme R. Lampert
 // Created on: 24/03/17
@@ -31,10 +30,10 @@ RenderPass::~RenderPass()
 
 void RenderPass::initialize(const VkRenderPassCreateInfo & rpCreateInfo)
 {
-    assert(m_renderPassHandle == VK_NULL_HANDLE); // Prevent double init
+    assert(!isInitialized()); // Prevent double init
 
-    VKTB_CHECK(vkCreateRenderPass(m_vkContext->getVkDeviceHandle(), &rpCreateInfo,
-                                  m_vkContext->getAllocationCallbacks(), &m_renderPassHandle));
+    VKTB_CHECK(vkCreateRenderPass(m_vkContext->deviceHandle(), &rpCreateInfo,
+                                  m_vkContext->allocationCallbacks(), &m_renderPassHandle));
 
     assert(m_renderPassHandle != VK_NULL_HANDLE);
 }
@@ -43,29 +42,10 @@ void RenderPass::shutdown()
 {
     if (m_renderPassHandle != VK_NULL_HANDLE)
     {
-        vkDestroyRenderPass(m_vkContext->getVkDeviceHandle(), m_renderPassHandle,
-                            m_vkContext->getAllocationCallbacks());
-
+        vkDestroyRenderPass(m_vkContext->deviceHandle(), m_renderPassHandle,
+                            m_vkContext->allocationCallbacks());
         m_renderPassHandle = VK_NULL_HANDLE;
     }
-}
-
-RenderPass::RenderPass(RenderPass && other)
-    : m_renderPassHandle{ other.m_renderPassHandle }
-    , m_vkContext{ other.m_vkContext }
-{
-    other.m_renderPassHandle = VK_NULL_HANDLE;
-}
-
-RenderPass & RenderPass::operator = (RenderPass && other)
-{
-    shutdown();
-
-    m_renderPassHandle = other.m_renderPassHandle;
-    m_vkContext        = other.m_vkContext;
-
-    other.m_renderPassHandle = VK_NULL_HANDLE;
-    return *this;
 }
 
 } // namespace VkToolbox

@@ -1,7 +1,6 @@
 #pragma once
 
 // ================================================================================================
-// -*- C++ -*-
 // File: VkToolbox/Image.hpp
 // Author: Guilherme R. Lampert
 // Created on: 21/03/17
@@ -88,12 +87,17 @@ public:
     // Pack each byte into an integer:
     // 0x00-00-00-00
     //   aa-bb-gg-rr
-    static std::uint32_t packRGBA(std::uint8_t r, std::uint8_t g,
-                                  std::uint8_t b, std::uint8_t a);
+    static std::uint32_t packRGBA(std::uint8_t r,
+                                  std::uint8_t g,
+                                  std::uint8_t b,
+                                  std::uint8_t a);
 
     // Undo the work of packRGBA.
-    static void unpackRGBA(std::uint32_t rgba, std::uint8_t & r,
-                           std::uint8_t & g, std::uint8_t & b, std::uint8_t & a);
+    static void unpackRGBA(std::uint32_t rgba,
+                           std::uint8_t & r,
+                           std::uint8_t & g,
+                           std::uint8_t & b,
+                           std::uint8_t & a);
 
 private:
 
@@ -120,8 +124,8 @@ struct ImageSurface final
     Size2D size = {0,0};
 
     ImageSurface() = default;
-    ImageSurface(std::uint8_t * data, Size2D s)
-        : rawData{ data }, size{ s }
+    ImageSurface(std::uint8_t * data, Size2D wh)
+        : rawData{ data }, size{ wh }
     { }
 
     bool isValid() const
@@ -135,13 +139,13 @@ struct ImageSurface final
                ((size.height & (size.height - 1)) == 0);
     }
 
-    int getPixelCount() const 
+    int pixelCount() const 
     {
         return size.width * size.height;
     }
 
-    template<typename T> const T * getPixelDataAs() const { return reinterpret_cast<T *>(rawData); }
-    template<typename T>       T * getPixelDataAs()       { return reinterpret_cast<T *>(rawData); }
+    template<typename T> const T * pixelDataAs() const { return reinterpret_cast<T *>(rawData); }
+    template<typename T>       T * pixelDataAs()       { return reinterpret_cast<T *>(rawData); }
 };
 
 // ========================================================
@@ -192,9 +196,9 @@ public:
     Image() = default;
 
     // Parameterized constructors simply forward to the equivalent init*() method, see below.
-    Image(Size2D size, Format format);
-    Image(Size2D size, Color32 fillColor);
-    Image(Size2D size, Format format, const void * baseSurface);
+    Image(Size2D wh, Format fmt);
+    Image(Size2D wh, Color32 fillColor);
+    Image(Size2D wh, Format fmt, const void * baseSurface);
     Image(const char * filePath, str * outOptErrorInfo = nullptr);
 
     // Movable.
@@ -211,40 +215,40 @@ public:
     bool isValid() const;
     bool isMipmapped() const;
 
-    int getBytesPerPixel() const;
-    int getChannelCount() const;
-    Format getFormat() const;
-    std::size_t getMemoryUsageBytes() const;
+    std::size_t memoryUsageBytes() const;
+    int bytesPerPixel() const;
+    int channelCount() const;
+    Format format() const;
 
-    int getSurfaceCount() const;
-    bool isPowerOfTwo(int surface = 0) const;
-    const Size2D & getSize(int surface = 0) const;
+    bool isPowerOfTwo(int surfaceIndex = 0) const;
+    const Size2D & size(int surfaceIndex = 0) const;
 
     // Access the pixel data as an opaque array
     // of bytes (fist surface/level only):
-    const std::uint8_t * getPixelDataBaseSurface() const;
-          std::uint8_t * getPixelDataBaseSurface();
+    const std::uint8_t * pixelDataBaseSurface() const;
+          std::uint8_t * pixelDataBaseSurface();
 
     // Surface access:
-    const ImageSurface & getSurface(int surface) const;
-          ImageSurface & getSurface(int surface);
+    int surfaceCount() const;
+    const ImageSurface & surface(int surfaceIndex) const;
+          ImageSurface & surface(int surfaceIndex);
 
     // Frees all memory and resets the object to initial states (an invalid image).
     void shutdown();
 
     // Allocate uninitialized memory for the image. Single surface.
-    void initWithSize(Size2D size, Format format);
+    void initWithSize(Size2D wh, Format fmt);
 
     // Allocate and fill with given color value (format is implicit RGBA8). Single surface.
-    void initWithColorFill(Size2D size, Color32 fillColor);
+    void initWithColorFill(Size2D wh, Color32 fillColor);
 
     // Initialize from an externally provided memory block.
     // The Image will copy the data. Creates a single base surface.
-    void initWithExternalData(Size2D size, Format format, const void * baseSurface);
+    void initWithExternalData(Size2D wh, Format fmt, const void * baseSurface);
 
     // Creates a RGBA checkerboard pattern image, size must be PoT. The number of checker
     // squares may range from 2 to 64, as long as it is a power-of-two. Single surface image.
-    void initWithCheckerPattern(Size2D size, int squares);
+    void initWithCheckerPattern(Size2D wh, int squares);
 
     // Clone the other image into this (base surface only). Can optionally generate mipmap surfaces.
     void initFromCopy(const Image & copy, bool genMipmapSurfaces);
@@ -258,35 +262,35 @@ public:
     // Writes the given image surface to a file on disk. Overwrites any existing
     // file with the same name. The format of the output image file will be inferred
     // from the extension. Supports: TGA, BMP and PNG.
-    bool writeToFile(const char * filePath, int surface = 0, str * outOptErrorInfo = nullptr) const;
+    bool writeToFile(const char * filePath, int surfaceIndex = 0, str * outOptErrorInfo = nullptr) const;
 
     // Dumps all surfaces in this image to files. Used mostly for debugging the mipmapper.
     // Path/directories must already exit. Output file names will be in the format:
     // <basePathName>_<surfaceIndex>.<extension>
     bool writeAllSurfacesToFiles(const char * basePathName, const char * extension) const;
 
-    // Get/set individual pixels for a given image surface.
-    void setPixel(int pX, int pY, const std::uint8_t * pixelIn, int surface = 0);
-    void getPixel(int pX, int pY, std::uint8_t * pixelOut, int surface = 0) const;
+    // Access/set individual pixels for a given image surface.
+    void setPixel(int pX, int pY, const std::uint8_t * pixelIn, int surfaceIndex = 0);
+    void pixel(int pX, int pY, std::uint8_t * pixelOut, int surfaceIndex = 0) const;
 
     // Swap the pixel at pX0/pY0 with the one at pX1/pY1.
-    void swapPixel(int pX0, int pY0, int pX1, int pY1, int surface = 0);
+    void swapPixel(int pX0, int pY0, int pX1, int pY1, int surfaceIndex = 0);
 
     // Flips the image surface vertically in-place without copying.
-    void flipVInPlace(int surface = 0);
+    void flipVInPlace(int surfaceIndex = 0);
 
     // Flips the image surface horizontally in-place without copying.
-    void flipHInPlace(int surface = 0);
+    void flipHInPlace(int surfaceIndex = 0);
 
     // Set every byte of the image's surface to the given value.
     // Equivalent to C's memset() function.
-    void byteFill(std::uint8_t fillWith, int surface = 0);
+    void byteFill(std::uint8_t fillWith, int surfaceIndex = 0);
 
     // Applies the user supplied function to every pixel of the image surface.
-    template<typename Func> void forEveryPixel(Func && fn, int surface = 0) const;
-    template<typename Func> void forEveryPixel(Func && fn, int surface = 0);
+    template<typename Func> void forEveryPixel(Func && fn, int surfaceIndex = 0) const;
+    template<typename Func> void forEveryPixel(Func && fn, int surfaceIndex = 0);
 
-    // Generates a set of mipmap surfaces from the base surface (surface=0).
+    // Generates a set of mipmap surfaces from the base surface (surfaceIndex=0).
     // This will fail if the image is invalid (e.g. has no surfaces).
     // Uses an implementation defined filter. Might allocate some memory.
     void generateMipmapSurfaces();
@@ -364,19 +368,19 @@ private:
 
 // ========================================================
 
-inline Image::Image(const Size2D size, const Format format)
+inline Image::Image(const Size2D wh, const Format fmt)
 {
-    initWithSize(size, format);
+    initWithSize(wh, fmt);
 }
 
-inline Image::Image(const Size2D size, const Color32 fillColor)
+inline Image::Image(const Size2D wh, const Color32 fillColor)
 {
-    initWithColorFill(size, fillColor);
+    initWithColorFill(wh, fillColor);
 }
 
-inline Image::Image(const Size2D size, const Format format, const void * const baseSurface)
+inline Image::Image(const Size2D wh, const Format fmt, const void * const baseSurface)
 {
-    initWithExternalData(size, format, baseSurface);
+    initWithExternalData(wh, fmt, baseSurface);
 }
 
 inline Image::Image(const char * const filePath, str * outOptErrorInfo)
@@ -411,7 +415,7 @@ inline void Image::initFromCopy(const Image & copy, const bool genMipmapSurfaces
     assert(copy.isValid());
     assert(!isInitialized());
 
-    initWithExternalData(copy.getSize(), copy.getFormat(), copy.getPixelDataBaseSurface());
+    initWithExternalData(copy.size(), copy.format(), copy.pixelDataBaseSurface());
     if (genMipmapSurfaces)
     {
         generateMipmapSurfaces();
@@ -429,9 +433,9 @@ inline bool Image::isValidAllSurfaces() const
     {
         return false;
     }
-    for (const ImageSurface & surface : m_surfaces)
+    for (const ImageSurface & surf : m_surfaces)
     {
-        if (!surface.isValid())
+        if (!surf.isValid())
         {
             return false;
         }
@@ -451,80 +455,80 @@ inline bool Image::isMipmapped() const
     return (m_rawDataMipmapSurfaces != nullptr);
 }
 
-inline int Image::getBytesPerPixel() const
+inline int Image::bytesPerPixel() const
 {
     return static_cast<int>(m_format);
 }
 
-inline int Image::getChannelCount() const
+inline int Image::channelCount() const
 {
     return static_cast<int>(m_format);
 }
 
-inline Image::Format Image::getFormat() const
+inline Image::Format Image::format() const
 {
     return m_format;
 }
 
-inline std::size_t Image::getMemoryUsageBytes() const
+inline std::size_t Image::memoryUsageBytes() const
 {
     return m_memoryUsageBytes;
 }
 
-inline int Image::getSurfaceCount() const
+inline int Image::surfaceCount() const
 {
     return m_surfaces.size();
 }
 
-inline bool Image::isPowerOfTwo(const int surface) const
+inline bool Image::isPowerOfTwo(const int surfaceIndex) const
 {
-    return m_surfaces[surface].isPowerOfTwo();
+    return m_surfaces[surfaceIndex].isPowerOfTwo();
 }
 
-inline const Size2D & Image::getSize(const int surface) const
+inline const Size2D & Image::size(const int surfaceIndex) const
 {
-    return m_surfaces[surface].size;
+    return m_surfaces[surfaceIndex].size;
 }
 
-inline const std::uint8_t * Image::getPixelDataBaseSurface() const
-{
-    return m_rawDataBaseSurface.get();
-}
-
-inline std::uint8_t * Image::getPixelDataBaseSurface()
+inline const std::uint8_t * Image::pixelDataBaseSurface() const
 {
     return m_rawDataBaseSurface.get();
 }
 
-inline const ImageSurface & Image::getSurface(const int surface) const
+inline std::uint8_t * Image::pixelDataBaseSurface()
 {
-    return m_surfaces[surface];
+    return m_rawDataBaseSurface.get();
 }
 
-inline ImageSurface & Image::getSurface(const int surface)
+inline const ImageSurface & Image::surface(const int surfaceIndex) const
 {
-    return m_surfaces[surface];
+    return m_surfaces[surfaceIndex];
 }
 
-inline void Image::byteFill(const std::uint8_t fillWith, const int surface)
+inline ImageSurface & Image::surface(const int surfaceIndex)
+{
+    return m_surfaces[surfaceIndex];
+}
+
+inline void Image::byteFill(const std::uint8_t fillWith, const int surfaceIndex)
 {
     assert(isValid());
 
-    ImageSurface & imgSurf = getSurface(surface);
-    const int pixelCount = imgSurf.getPixelCount();
+    ImageSurface & surf = surface(surfaceIndex);
+    const int pixelCount = surf.pixelCount();
 
-    std::memset(imgSurf.rawData, fillWith, pixelCount * getBytesPerPixel());
+    std::memset(surf.rawData, fillWith, pixelCount * bytesPerPixel());
 }
 
 template<typename Func>
-inline void Image::forEveryPixel(Func && fn, const int surface) const
+inline void Image::forEveryPixel(Func && fn, const int surfaceIndex) const
 {
     assert(isValid());
 
-    const ImageSurface & imgSurf       = getSurface(surface);
-    const std::uint8_t * surfDataPtr   = imgSurf.rawData;
-    const int            pixelCount    = imgSurf.getPixelCount();
-    const int            bytesPerPixel = getBytesPerPixel();
+    const ImageSurface & surf          = surface(surfaceIndex);
+    const std::uint8_t * surfDataPtr   = surf.rawData;
+    const int            pixelCount    = surf.pixelCount();
+    const int            bytesPerPixel = bytesPerPixel();
 
     for (int p = 0; p < pixelCount; ++p, surfDataPtr += bytesPerPixel)
     {
@@ -533,14 +537,14 @@ inline void Image::forEveryPixel(Func && fn, const int surface) const
 }
 
 template<typename Func>
-inline void Image::forEveryPixel(Func && fn, const int surface)
+inline void Image::forEveryPixel(Func && fn, const int surfaceIndex)
 {
     assert(isValid());
 
-    ImageSurface & imgSurf       = getSurface(surface);
-    std::uint8_t * surfDataPtr   = imgSurf.rawData;
-    const int      pixelCount    = imgSurf.getPixelCount();
-    const int      bytesPerPixel = getBytesPerPixel();
+    ImageSurface & surf          = surface(surfaceIndex);
+    std::uint8_t * surfDataPtr   = surf.rawData;
+    const int      pixelCount    = surf.pixelCount();
+    const int      bytesPerPixel = bytesPerPixel();
 
     for (int p = 0; p < pixelCount; ++p, surfDataPtr += bytesPerPixel)
     {
@@ -719,14 +723,19 @@ inline std::uint8_t Color32::floatToByte(const float f)
     return static_cast<std::uint8_t>(f * 255.0f);
 }
 
-inline std::uint32_t Color32::packRGBA(const std::uint8_t r, const std::uint8_t g,
-                                       const std::uint8_t b, const std::uint8_t a)
+inline std::uint32_t Color32::packRGBA(const std::uint8_t r,
+                                       const std::uint8_t g,
+                                       const std::uint8_t b,
+                                       const std::uint8_t a)
 {
     return static_cast<std::uint32_t>((a << 24) | (b << 16) | (g << 8) | r);
 }
 
-inline void Color32::unpackRGBA(const std::uint32_t rgba, std::uint8_t & r,
-                                std::uint8_t & g, std::uint8_t & b, std::uint8_t & a)
+inline void Color32::unpackRGBA(const std::uint32_t rgba,
+                                std::uint8_t & r,
+                                std::uint8_t & g,
+                                std::uint8_t & b,
+                                std::uint8_t & a)
 {
     r = static_cast<std::uint8_t>((rgba & 0x000000FF) >> 0);
     g = static_cast<std::uint8_t>((rgba & 0x0000FF00) >> 8);

@@ -1,6 +1,5 @@
 
 // ================================================================================================
-// -*- C++ -*-
 // File: VkToolbox/Texture.cpp
 // Author: Guilherme R. Lampert
 // Created on: 03/01/17
@@ -34,28 +33,6 @@ Sampler::~Sampler()
     shutdown();
 }
 
-void Sampler::initialize(const VkSamplerCreateInfo & samplerCreateInfo)
-{
-    assert(m_samplerHandle == VK_NULL_HANDLE); // Prevent double init
-
-    m_samplerDesc = samplerCreateInfo;
-    VKTB_CHECK(vkCreateSampler(m_vkContext->getVkDeviceHandle(), &m_samplerDesc,
-                               m_vkContext->getAllocationCallbacks(), &m_samplerHandle));
-
-    assert(m_samplerHandle != VK_NULL_HANDLE);
-}
-
-void Sampler::shutdown()
-{
-    if (m_samplerHandle != VK_NULL_HANDLE) // Could have been moved
-    {
-        vkDestroySampler(m_vkContext->getVkDeviceHandle(), m_samplerHandle,
-                         m_vkContext->getAllocationCallbacks());
-
-        m_samplerHandle = VK_NULL_HANDLE;
-    }
-}
-
 Sampler::Sampler(Sampler && other)
     : m_vkContext{ other.m_vkContext }
     , m_samplerHandle{ other.m_samplerHandle }
@@ -74,6 +51,27 @@ Sampler & Sampler::operator = (Sampler && other)
 
     other.m_samplerHandle = VK_NULL_HANDLE;
     return *this;
+}
+
+void Sampler::initialize(const VkSamplerCreateInfo & samplerCreateInfo)
+{
+    assert(!isInitialized()); // Prevent double init
+
+    m_samplerDesc = samplerCreateInfo;
+    VKTB_CHECK(vkCreateSampler(m_vkContext->deviceHandle(), &m_samplerDesc,
+                               m_vkContext->allocationCallbacks(), &m_samplerHandle));
+
+    assert(m_samplerHandle != VK_NULL_HANDLE);
+}
+
+void Sampler::shutdown()
+{
+    if (m_samplerHandle != VK_NULL_HANDLE) // Could have been moved
+    {
+        vkDestroySampler(m_vkContext->deviceHandle(), m_samplerHandle,
+                         m_vkContext->allocationCallbacks());
+        m_samplerHandle = VK_NULL_HANDLE;
+    }
 }
 
 // ========================================================
@@ -145,7 +143,7 @@ bool Texture::load()
         return false;
     }
 
-    const char * const name = getId().getName();
+    const char * const name = resourceId().c_str();
     if (!probeFile(name))
     {
         Log::warningF("Image file '%s' does not exist! Can't load texture from it.", name);
@@ -181,8 +179,8 @@ bool Texture::load()
 
 void Texture::unload()
 {
-    const auto device   = m_vkContext->getVkDeviceHandle();
-    const auto allocCBs = m_vkContext->getAllocationCallbacks();
+    const auto device   = m_vkContext->deviceHandle();
+    const auto allocCBs = m_vkContext->allocationCallbacks();
 
     if (m_imageViewHandle != VK_NULL_HANDLE)
     {
@@ -205,8 +203,8 @@ void Texture::unload()
 
 void Texture::releaseStagingImage()
 {
-    const auto device   = m_vkContext->getVkDeviceHandle();
-    const auto allocCBs = m_vkContext->getAllocationCallbacks();
+    const auto device   = m_vkContext->deviceHandle();
+    const auto allocCBs = m_vkContext->allocationCallbacks();
 
     if (m_stagingImageHandle != VK_NULL_HANDLE)
     {
@@ -242,12 +240,12 @@ void Texture::initVkTextureData(const Image & image)
 {
     VkImageCreateInfo imageInfo;
 
-    const auto device                 = m_vkContext->getVkDeviceHandle();
-    const CommandBuffer & cmdBuff     = m_vkContext->getMainTextureStagingCmdBuffer();
-    const Size2D imageSize            = image.getSize();
-    const int bytesPerPixel           = image.getBytesPerPixel();
-    const int mipmapCount             = image.getSurfaceCount();
-    const VkFormat vkImgFormat        = getVkFormat(image.getFormat());
+    const auto device                 = m_vkContext->deviceHandle();
+    const CommandBuffer & cmdBuff     = m_vkContext->mainTextureStagingCmdBuffer();
+    const Size2D imageSize            = image.size();
+    const int bytesPerPixel           = image.bytesPerPixel();
+    const int mipmapSurfCount         = image.surfaceCount();
+    const VkFormat vkImgFormat        = toVkImageFormat(image.format());
     const VkDeviceSize imageSizeBytes = (imageSize.width * imageSize.height * bytesPerPixel);
 
     // Temporary staging image:
@@ -259,7 +257,7 @@ void Texture::initVkTextureData(const Image & image)
     imageInfo.extent.width            = imageSize.width;
     imageInfo.extent.height           = imageSize.height;
     imageInfo.extent.depth            = 1;
-    imageInfo.mipLevels               = mipmapCount;
+    imageInfo.mipLevels               = mipmapSurfCount;
     imageInfo.arrayLayers             = 1;
     imageInfo.samples                 = VK_SAMPLE_COUNT_1_BIT;
     imageInfo.tiling                  = VK_IMAGE_TILING_LINEAR;
@@ -287,11 +285,11 @@ void Texture::initVkTextureData(const Image & image)
 
         if (stagingImageLayout.rowPitch == (imageSize.width * bytesPerPixel))
         {
-            std::memcpy(pData, image.getPixelDataBaseSurface(), imageSizeBytes);
+            std::memcpy(pData, image.pixelDataBaseSurface(), imageSizeBytes);
         }
         else
         {
-            auto * pixels = image.getPixelDataBaseSurface();
+            auto * pixels = image.pixelDataBaseSurface();
             auto * dataBytes = static_cast<std::uint8_t *>(pData);
 
             for (int y = 0; y < imageSize.height; ++y)
@@ -312,7 +310,7 @@ void Texture::initVkTextureData(const Image & image)
     imageInfo.extent.width          = imageSize.width;
     imageInfo.extent.height         = imageSize.height;
     imageInfo.extent.depth          = 1;
-    imageInfo.mipLevels             = mipmapCount;
+    imageInfo.mipLevels             = mipmapSurfCount;
     imageInfo.arrayLayers           = 1;
     imageInfo.samples               = VK_SAMPLE_COUNT_1_BIT;
     imageInfo.tiling                = VK_IMAGE_TILING_OPTIMAL;
@@ -326,22 +324,22 @@ void Texture::initVkTextureData(const Image & image)
                              &m_imageHandle, &m_imageMemHandle);
 
     // Staging image => source of an image copy op
-    m_vkContext->changeImageLayout(&cmdBuff, m_stagingImageHandle,
+    m_vkContext->changeImageLayout(cmdBuff, m_stagingImageHandle,
                                    VK_IMAGE_ASPECT_COLOR_BIT,
                                    VK_IMAGE_LAYOUT_PREINITIALIZED,
                                    VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
 
     // Final color texture image => destination of an image copy op
-    m_vkContext->changeImageLayout(&cmdBuff, m_imageHandle,
+    m_vkContext->changeImageLayout(cmdBuff, m_imageHandle,
                                    VK_IMAGE_ASPECT_COLOR_BIT,
                                    VK_IMAGE_LAYOUT_PREINITIALIZED,
                                    VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
 
     // Copy from the staging to the final color texture image:
-    m_vkContext->copyImage(&cmdBuff, m_stagingImageHandle, m_imageHandle, imageSize);
+    m_vkContext->copyImage(cmdBuff, m_stagingImageHandle, m_imageHandle, imageSize);
 
     // Final color texture image => shader visible image (we can now sample from it)
-    m_vkContext->changeImageLayout(&cmdBuff, m_imageHandle,
+    m_vkContext->changeImageLayout(cmdBuff, m_imageHandle,
                                    VK_IMAGE_ASPECT_COLOR_BIT,
                                    VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                                    VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
@@ -360,19 +358,19 @@ void Texture::initVkTextureData(const Image & image)
     viewCreateInfo.components.a                    = VK_COMPONENT_SWIZZLE_A;
     viewCreateInfo.subresourceRange.aspectMask     = VK_IMAGE_ASPECT_COLOR_BIT;
     viewCreateInfo.subresourceRange.baseMipLevel   = 0;
-    viewCreateInfo.subresourceRange.levelCount     = mipmapCount;
+    viewCreateInfo.subresourceRange.levelCount     = mipmapSurfCount;
     viewCreateInfo.subresourceRange.baseArrayLayer = 0;
     viewCreateInfo.subresourceRange.layerCount     = 1;
-    VKTB_CHECK(vkCreateImageView(device, &viewCreateInfo, m_vkContext->getAllocationCallbacks(), &m_imageViewHandle));
+    VKTB_CHECK(vkCreateImageView(device, &viewCreateInfo, m_vkContext->allocationCallbacks(), &m_imageViewHandle));
 
     // Set the new member states and we are done.
     m_imageSize     = imageSize;
     m_imageFormat   = vkImgFormat;
-    m_imageMipmaps  = mipmapCount;
+    m_imageMipmaps  = mipmapSurfCount;
     m_imageViewType = VK_IMAGE_VIEW_TYPE_2D;
 }
 
-VkFormat Texture::getVkFormat(const Image::Format format)
+VkFormat Texture::toVkImageFormat(const Image::Format format)
 {
     switch (format)
     {
@@ -384,7 +382,7 @@ VkFormat Texture::getVkFormat(const Image::Format format)
     } // switch
 }
 
-Image::Format Texture::getImageFormat(const VkFormat format)
+Image::Format Texture::toInternalImageFormat(const VkFormat format)
 {
     switch (format)
     {

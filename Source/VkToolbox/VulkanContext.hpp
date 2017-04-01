@@ -1,7 +1,6 @@
 #pragma once
 
 // ================================================================================================
-// -*- C++ -*-
 // File: VkToolbox/VulkanContext.hpp
 // Author: Guilherme R. Lampert
 // Created on: 11/01/17
@@ -73,36 +72,58 @@ public:
     static bool isRelease();
 
     // Device (AKA GPU) info queries:
-    VkDevice getVkDeviceHandle() const;
-    const VkPhysicalDeviceFeatures & getDeviceFeatures() const;
-    const VkPhysicalDeviceProperties & getDeviceProperties() const;
-    const VkPhysicalDeviceMemoryProperties & getDeviceMemoryProperties() const;
-    const VkFormatProperties & getVkFormatPropertiesForImageFormat(Image::Format format) const;
-    const VkImageFormatProperties & getVkImageFormatPropertiesForImageFormat(Image::Format format) const;
+    VkDevice deviceHandle() const;
+    const VkPhysicalDeviceFeatures & deviceFeatures() const;
+    const VkPhysicalDeviceProperties & deviceProperties() const;
+    const VkPhysicalDeviceMemoryProperties & deviceMemoryProperties() const;
+    const VkFormatProperties & vkFormatPropertiesForImageFormat(Image::Format format) const;
+    const VkImageFormatProperties & vkImageFormatPropertiesForImageFormat(Image::Format format) const;
 
     // Accessors:
-    const OSWindow & getRenderWindow() const;
-    const VkAllocationCallbacks * getAllocationCallbacks() const;
-    VkFramebuffer getVkFramebufferHandle(int index) const;
-    Size2D getRenderWindowSize()   const;
-    Size2D getFramebufferSize()    const;
-    std::uint32_t getFrameNumber() const;
-    int getSwapChainBufferIndex()  const;
-    int getSwapChainBufferCount()  const;
+    const OSWindow & renderWindow() const;
+    const VkAllocationCallbacks * allocationCallbacks() const;
+    VkFramebuffer framebufferHandle(int index) const;
+    Size2D renderWindowSize()   const;
+    Size2D framebufferSize()    const;
+    std::uint32_t frameNumber() const;
+    int swapChainBufferIndex()  const;
+    int swapChainBufferCount()  const;
 
     // Shareable objects:
-    FenceCache * getMainFenceCache() const;
-    const RenderPass & getMainRenderPass() const;
-    const CommandPool & getMainTextureStagingCmdBufferPool() const;
-    const CommandBuffer & getMainTextureStagingCmdBuffer() const;
+    FenceCache * mainFenceCache() const;
+    const RenderPass & mainRenderPass() const;
+    const CommandPool & mainTextureStagingCmdBufferPool() const;
+    const CommandBuffer & mainTextureStagingCmdBuffer() const;
 
     //
-    // Frame rendering:
+    // Frame rendering / draw calls:
     //
 
     void beginFrame();
     void endFrame(array_view<const VkCommandBuffer> submitBuffers, VkFence fence = VK_NULL_HANDLE);
+
+    void beginRenderPass(const CommandBuffer & cmdBuff) const;
+    void endRenderPass(const CommandBuffer & cmdBuff) const;
+
+    void bindGraphicsPipelineState(const CommandBuffer & cmdBuff, VkPipeline pipeline) const;
+    void bindGraphicsDescriptorSets(const CommandBuffer & cmdBuff, VkPipelineLayout layout,
+                                    array_view<const VkDescriptorSet> descriptorSets) const;
+
+    void drawUnindexed(const CommandBuffer & cmdBuff,
+                       std::uint32_t vertexCount, std::uint32_t instanceCount,
+                       std::uint32_t firstVertex, std::uint32_t firstInstance) const;
+
+    void drawIndexed(const CommandBuffer & cmdBuff,
+                     std::uint32_t indexCount, std::uint32_t instanceCount,
+                     std::uint32_t firstIndex, std::int32_t  vertexOffset,
+                     std::uint32_t firstInstance) const;
+
+    // Blocks until all pending GPU work is completed.
     void waitGpuIdle() const;
+
+    // Default screen framebuffer clear-color and depth/stencil values.
+    void setDefaultClearValue(const VkClearValue & value);
+    const VkClearValue & defaultClearValue() const;
 
     //
     // GPU queues info:
@@ -116,35 +137,30 @@ public:
         operator VkQueue() const { return queue; }
     };
 
-    const GpuQueue & getPresentQueue() const;
-    const GpuQueue & getGraphisQueue() const;
+    const GpuQueue & presentQueue() const;
+    const GpuQueue & graphisQueue() const;
 
     //
     // Miscellaneous helpers:
     //
 
-    static constexpr auto ColorMaskRGBA = (VK_COLOR_COMPONENT_R_BIT |
-                                           VK_COLOR_COMPONENT_G_BIT |
-                                           VK_COLOR_COMPONENT_B_BIT |
-                                           VK_COLOR_COMPONENT_A_BIT);
+    std::uint32_t memoryTypeFromProperties(std::uint32_t typeBits, VkFlags requirementsMask) const;
 
-    std::uint32_t getMemoryTypeFromProperties(std::uint32_t typeBits, VkFlags requirementsMask) const;
+    void changeImageLayout(const CommandBuffer & cmdBuff, VkImage image, VkImageAspectFlags aspectMask,
+                           VkImageLayout oldImageLayout, VkImageLayout newImageLayout,
+                           int baseMipLevel = 0, int mipLevelCount = 1) const;
 
-    void changeImageLayout(const CommandBuffer * cmdBuff, VkImage image,
-                           VkImageAspectFlags aspectMask, VkImageLayout oldImageLayout,
-                           VkImageLayout newImageLayout, int baseMipLevel = 0, int mipLevelCount = 1) const;
-
-    void copyImage(const CommandBuffer * cmdBuff, VkImage srcImage,
+    void copyImage(const CommandBuffer & cmdBuff, VkImage srcImage,
                    VkImage dstImage, Size2D size) const;
 
     void createImage(const VkImageCreateInfo & imageInfo, VkMemoryPropertyFlags memoryProperties,
                      VkImage * outImage, VkDeviceMemory * outImageMemory) const;
 
-    void copyBuffer(const CommandBuffer * cmdBuff, VkBuffer srcBuffer,
+    void copyBuffer(const CommandBuffer & cmdBuff, VkBuffer srcBuffer,
                     VkBuffer dstBuffer, VkDeviceSize sizeToCopy,
                     VkDeviceSize srcOffset = 0, VkDeviceSize dstOffset = 0) const;
 
-    void createBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags memoryProperties,
+    void createBuffer(VkDeviceSize sizeBytes, VkBufferUsageFlags usage, VkMemoryPropertyFlags memoryProperties,
                       VkBuffer * outBuffer, VkDeviceMemory * outBufferMemory) const;
 
 private:
@@ -241,6 +257,7 @@ private:
 
     // Main/default render pass and shareable fence cache.
     RenderPass m_mainRenderPass;
+    std::array<VkClearValue, 3> m_clearValues;
     std::unique_ptr<FenceCache> m_mainFenceCache;
 
     // Command buffers used exclusively for texture uploads (staging resources).
@@ -273,6 +290,13 @@ private:
 };
 
 // ========================================================
+
+constexpr auto ColorMaskRGBA = (VK_COLOR_COMPONENT_R_BIT |
+                                VK_COLOR_COMPONENT_G_BIT |
+                                VK_COLOR_COMPONENT_B_BIT |
+                                VK_COLOR_COMPONENT_A_BIT);
+
+// ========================================================
 // class FenceCache:
 // ========================================================
 
@@ -285,7 +309,7 @@ public:
         , m_allocCount{ 0 }
     { }
 
-    const VulkanContext & getVkContext() const { return *m_vkContext; }
+    const VulkanContext & context() const { return *m_vkContext; }
 
     // Note: Will free all fences currently in the cache!
     // Make sure no external refs remain.
@@ -336,11 +360,7 @@ public:
     // Implicitly waits on the fence if not already waited/signaled.
     ~AutoFence();
 
-    // Movable.
-    AutoFence(AutoFence && other);
-    AutoFence & operator = (AutoFence && other);
-
-    // But not copyable.
+    // Not copyable.
     AutoFence(const AutoFence &) = delete;
     AutoFence & operator = (const AutoFence &) = delete;
 
@@ -356,17 +376,57 @@ public:
     bool isWaitable() const;
 
     // Accessors:
-    FenceCache * getFenceCache() const;
-    VkFence getVkFenceHandle() const;
-
-    // Implicit conversion to VkFence.
+    FenceCache * fenceCache() const { return m_cache; }
+    VkFence fenceHandle() const { return m_fenceHandle; }
     operator VkFence() const { return m_fenceHandle; }
 
 private:
 
-    // Owned my the context and recycled once waited on.
+    // Owned by the context and recycled once waited on.
     FenceCache * m_cache;
     VkFence      m_fenceHandle;
+};
+
+// ========================================================
+// class Fence:
+// ========================================================
+
+class Fence final
+{
+public:
+
+    explicit Fence(const VulkanContext & vkContext) // Uninitialized fence - call initialize() before use
+        : m_vkContext{ &vkContext }
+    { }
+
+    Fence(const VulkanContext & vkContext, const VkFenceCreateFlags initFlags)
+        : m_vkContext{ &vkContext }
+    {
+        initialize(initFlags);
+    }
+
+    ~Fence() { shutdown(); }
+
+    // Not copyable.
+    Fence(const Fence &) = delete;
+    Fence & operator = (const Fence &) = delete;
+
+    void initialize(VkFenceCreateFlags flags);
+    void shutdown();
+
+    bool wait(std::uint64_t timeout = DefaultFenceWaitTimeout) const;
+    bool isSignaled() const;
+    void reset();
+
+     // Accessors:
+    const VulkanContext & context() const { return *m_vkContext; }
+    VkFence fenceHandle() const { return m_fenceHandle; }
+    operator VkFence() const { return m_fenceHandle; }
+
+private:
+
+    VkFence m_fenceHandle = VK_NULL_HANDLE;
+    const VulkanContext * m_vkContext;
 };
 
 // ========================================================
@@ -377,7 +437,7 @@ struct ScopedMapMemory final
 {
     ScopedMapMemory(const VulkanContext & context, VkDeviceMemory memory, VkDeviceSize offset,
                     VkDeviceSize size, VkMemoryMapFlags flags, void ** ppData)
-        : m_deviceHandle{ context.getVkDeviceHandle() }
+        : m_deviceHandle{ context.deviceHandle() }
         , m_memoryHandle{ memory }
     {
         const VkResult res = vkMapMemory(m_deviceHandle, memory, offset, size, flags, ppData);
@@ -468,7 +528,7 @@ private:
     {
         if (m_handle != VK_NULL_HANDLE)
         {
-            m_deleter(m_vkContex->getVkDeviceHandle(), m_handle, m_vkContex->getAllocationCallbacks());
+            m_deleter(m_vkContex->deviceHandle(), m_handle, m_vkContex->allocationCallbacks());
             m_handle = VK_NULL_HANDLE;
         }
     }
@@ -488,99 +548,175 @@ inline bool VulkanContext::isRelease()
     return (sm_validationMode == Release);
 }
 
-inline VkDevice VulkanContext::getVkDeviceHandle() const
+inline VkDevice VulkanContext::deviceHandle() const
 {
     return m_device;
 }
 
-inline const VkPhysicalDeviceMemoryProperties & VulkanContext::getDeviceMemoryProperties() const
+inline const VkPhysicalDeviceMemoryProperties & VulkanContext::deviceMemoryProperties() const
 {
     return m_gpuInfo.memoryProperties;
 }
 
-inline const VkFormatProperties & VulkanContext::getVkFormatPropertiesForImageFormat(const Image::Format format) const
+inline const VkFormatProperties & VulkanContext::vkFormatPropertiesForImageFormat(const Image::Format format) const
 {
     return m_formatPropsCache[format];
 }
 
-inline const VkImageFormatProperties & VulkanContext::getVkImageFormatPropertiesForImageFormat(const Image::Format format) const
+inline const VkImageFormatProperties & VulkanContext::vkImageFormatPropertiesForImageFormat(const Image::Format format) const
 {
     return m_imageFormatPropsCache[format];
 }
 
-inline const VkPhysicalDeviceProperties & VulkanContext::getDeviceProperties() const
+inline const VkPhysicalDeviceProperties & VulkanContext::deviceProperties() const
 {
     return m_gpuInfo.properties;
 }
 
-inline const VkPhysicalDeviceFeatures & VulkanContext::getDeviceFeatures() const
+inline const VkPhysicalDeviceFeatures & VulkanContext::deviceFeatures() const
 {
     return m_gpuInfo.features;
 }
 
-inline const OSWindow & VulkanContext::getRenderWindow() const
+inline const OSWindow & VulkanContext::renderWindow() const
 {
     return *m_renderWindow;
 }
 
-inline const VkAllocationCallbacks * VulkanContext::getAllocationCallbacks() const
+inline const VkAllocationCallbacks * VulkanContext::allocationCallbacks() const
 {
     return m_allocationCallbacks;
 }
 
-inline Size2D VulkanContext::getFramebufferSize() const
+inline Size2D VulkanContext::framebufferSize() const
 {
     return m_swapChain.framebufferSize;
 }
 
-inline std::uint32_t VulkanContext::getFrameNumber() const
+inline std::uint32_t VulkanContext::frameNumber() const
 {
     return m_frameNumber;
 }
 
-inline VkFramebuffer VulkanContext::getVkFramebufferHandle(const int index) const
+inline VkFramebuffer VulkanContext::framebufferHandle(const int index) const
 {
     return m_swapChain.buffers[index].framebuffer;
 }
 
-inline int VulkanContext::getSwapChainBufferIndex() const
+inline int VulkanContext::swapChainBufferIndex() const
 {
     return static_cast<int>(m_swapChain.bufferIndex);
 }
 
-inline int VulkanContext::getSwapChainBufferCount() const
+inline int VulkanContext::swapChainBufferCount() const
 {
     return static_cast<int>(m_swapChain.bufferCount);
 }
 
-inline FenceCache * VulkanContext::getMainFenceCache() const
+inline FenceCache * VulkanContext::mainFenceCache() const
 {
     return m_mainFenceCache.get();
 }
 
-inline const RenderPass & VulkanContext::getMainRenderPass() const
+inline const RenderPass & VulkanContext::mainRenderPass() const
 {
     return m_mainRenderPass;
 }
 
-inline const CommandPool & VulkanContext::getMainTextureStagingCmdBufferPool() const
+inline const CommandPool & VulkanContext::mainTextureStagingCmdBufferPool() const
 {
     return m_mainTextureStagingCmdBufferPool;
 }
 
-inline const CommandBuffer & VulkanContext::getMainTextureStagingCmdBuffer() const
+inline const CommandBuffer & VulkanContext::mainTextureStagingCmdBuffer() const
 {
     return m_mainTextureStagingCmdBuffer;
 }
 
-inline const VulkanContext::GpuQueue & VulkanContext::getPresentQueue() const
+inline const VulkanContext::GpuQueue & VulkanContext::presentQueue() const
 {
     return m_gpuPresentQueue;
 }
 
-inline const VulkanContext::GpuQueue & VulkanContext::getGraphisQueue() const
+inline const VulkanContext::GpuQueue & VulkanContext::graphisQueue() const
 {
     return m_gpuGraphicsQueue;
+}
+
+inline void VulkanContext::setDefaultClearValue(const VkClearValue & value)
+{
+    for (std::size_t i = 0; i < m_clearValues.size(); ++i)
+    {
+        m_clearValues[i] = value;
+    }
+}
+
+inline const VkClearValue & VulkanContext::defaultClearValue() const
+{
+    return m_clearValues[0];
+}
+
+inline void VulkanContext::beginRenderPass(const CommandBuffer & cmdBuff) const
+{
+    assert(cmdBuff.isInRecordingState());
+
+    VkRenderPassBeginInfo renderPassInfo;
+    renderPassInfo.sType                    = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+    renderPassInfo.pNext                    = nullptr;
+    renderPassInfo.renderPass               = mainRenderPass();
+    renderPassInfo.framebuffer              = framebufferHandle(swapChainBufferIndex());
+    renderPassInfo.renderArea.offset.x      = 0;
+    renderPassInfo.renderArea.offset.y      = 0;
+    renderPassInfo.renderArea.extent.width  = framebufferSize().width;
+    renderPassInfo.renderArea.extent.height = framebufferSize().height;
+    renderPassInfo.clearValueCount          = swapChainBufferCount();
+    renderPassInfo.pClearValues             = m_clearValues.data();
+
+    vkCmdBeginRenderPass(cmdBuff.commandBufferHandle(), &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+}
+
+inline void VulkanContext::endRenderPass(const CommandBuffer & cmdBuff) const
+{
+    assert(cmdBuff.isInRecordingState());
+    vkCmdEndRenderPass(cmdBuff.commandBufferHandle());
+}
+
+inline void VulkanContext::bindGraphicsPipelineState(const CommandBuffer & cmdBuff, VkPipeline pipeline) const
+{
+    assert(pipeline != VK_NULL_HANDLE);
+    assert(cmdBuff.isInRecordingState());
+    vkCmdBindPipeline(cmdBuff.commandBufferHandle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
+}
+
+inline void VulkanContext::bindGraphicsDescriptorSets(const CommandBuffer & cmdBuff, VkPipelineLayout layout,
+                                                      array_view<const VkDescriptorSet> descriptorSets) const
+{
+    assert(layout != VK_NULL_HANDLE);
+    assert(cmdBuff.isInRecordingState());
+    vkCmdBindDescriptorSets(cmdBuff.commandBufferHandle(), VK_PIPELINE_BIND_POINT_GRAPHICS, layout, 0,
+                            static_cast<std::uint32_t>(descriptorSets.size()), descriptorSets.data(), 0, nullptr);
+}
+
+inline void VulkanContext::drawUnindexed(const CommandBuffer & cmdBuff,
+                                         std::uint32_t vertexCount, std::uint32_t instanceCount,
+                                         std::uint32_t firstVertex, std::uint32_t firstInstance) const
+{
+    assert(cmdBuff.isInRecordingState());
+    vkCmdDraw(cmdBuff.commandBufferHandle(),
+              vertexCount, instanceCount,
+              firstVertex, firstInstance);
+}
+
+inline void VulkanContext::drawIndexed(const CommandBuffer & cmdBuff,
+                                       std::uint32_t indexCount, std::uint32_t instanceCount,
+                                       std::uint32_t firstIndex, std::int32_t  vertexOffset,
+                                       std::uint32_t firstInstance) const
+{
+    assert(cmdBuff.isInRecordingState());
+    vkCmdDrawIndexed(cmdBuff.commandBufferHandle(),
+                     indexCount, instanceCount,
+                     firstIndex, vertexOffset,
+                     firstInstance);
 }
 
 inline void VulkanContext::waitGpuIdle() const
@@ -606,43 +742,66 @@ inline AutoFence::~AutoFence()
     }
 }
 
-inline AutoFence::AutoFence(AutoFence && other)
-    : m_cache{ other.m_cache }
-    , m_fenceHandle{ other.m_fenceHandle }
-{
-    other.m_cache       = nullptr;
-    other.m_fenceHandle = VK_NULL_HANDLE;
-}
-
-inline AutoFence & AutoFence::operator = (AutoFence && other)
-{
-    if (isWaitable())
-    {
-        // Best strategy here?
-        while (wait() == false) { }
-    }
-
-    m_cache             = other.m_cache;
-    m_fenceHandle       = other.m_fenceHandle;
-    other.m_cache       = nullptr;
-    other.m_fenceHandle = VK_NULL_HANDLE;
-
-    return *this;
-}
-
 inline bool AutoFence::isWaitable() const
 {
     return (m_fenceHandle != VK_NULL_HANDLE);
 }
 
-inline FenceCache * AutoFence::getFenceCache() const
+// ========================================================
+// Fence inline methods:
+// ========================================================
+
+inline void Fence::initialize(const VkFenceCreateFlags flags)
 {
-    return m_cache;
+    assert(m_fenceHandle == VK_NULL_HANDLE);
+
+    VkFenceCreateInfo fenceCreateInfo;
+    fenceCreateInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+    fenceCreateInfo.pNext = nullptr;
+    fenceCreateInfo.flags = flags;
+
+    const VkResult res = vkCreateFence(m_vkContext->deviceHandle(), &fenceCreateInfo,
+                                       m_vkContext->allocationCallbacks(), &m_fenceHandle);
+    assert(res == VK_SUCCESS); (void)res;
 }
 
-inline VkFence AutoFence::getVkFenceHandle() const
+inline void Fence::shutdown()
 {
-    return m_fenceHandle;
+    if (m_fenceHandle != VK_NULL_HANDLE)
+    {
+        vkDestroyFence(m_vkContext->deviceHandle(), m_fenceHandle, m_vkContext->allocationCallbacks());
+        m_fenceHandle = VK_NULL_HANDLE;
+    }
+}
+
+inline bool Fence::wait(const std::uint64_t timeout) const
+{
+    assert(m_fenceHandle != VK_NULL_HANDLE);
+    const VkResult res = vkWaitForFences(m_vkContext->deviceHandle(), 1, &m_fenceHandle, VK_TRUE, timeout);
+    if (res == VK_TIMEOUT)
+    {
+        return false;
+    }
+    else if (res == VK_SUCCESS)
+    {
+        return true;
+    }
+    else // Some other internal failure...
+    {
+        Log::fatalF("vkWaitForFences() failed with error %#x", res);
+    }
+}
+
+inline bool Fence::isSignaled() const
+{
+    assert(m_fenceHandle != VK_NULL_HANDLE);
+    const VkResult res = vkGetFenceStatus(m_vkContext->deviceHandle(), m_fenceHandle);
+    return (res == VK_SUCCESS);
+}
+
+inline void Fence::reset()
+{
+    vkResetFences(m_vkContext->deviceHandle(), 1, &m_fenceHandle);
 }
 
 // ========================================================

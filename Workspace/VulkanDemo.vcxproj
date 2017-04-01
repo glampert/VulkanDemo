@@ -70,7 +70,7 @@
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <AdditionalLibraryDirectories>$(VK_SDK_PATH)/Bin;$(SolutionDir)../Source/External/prebuilt_libs/glslang/debug_x64;$(SolutionDir)../Source/External/prebuilt_libs/assimp/debug_x64;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>vulkan-1.lib;glslangd.lib;HLSLd.lib;SPIRVd.lib;SPVRemapperd.lib;OGLCompilerd.lib;OSDependentd.lib;assimp_vc140.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>vulkan-1.lib;glslangd.lib;SPIRVd.lib;SPVRemapperd.lib;OGLCompilerd.lib;OSDependentd.lib;assimp_vc140.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -95,7 +95,7 @@
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <AdditionalLibraryDirectories>$(VK_SDK_PATH)/Bin;$(SolutionDir)../Source/External/prebuilt_libs/glslang/release_x64;$(SolutionDir)../Source/External/prebuilt_libs/assimp/release_x64;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>vulkan-1.lib;glslang.lib;HLSL.lib;SPIRV.lib;SPVRemapper.lib;OGLCompiler.lib;OSDependent.lib;assimp_vc140.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>vulkan-1.lib;glslang.lib;SPIRV.lib;SPVRemapper.lib;OGLCompiler.lib;OSDependent.lib;assimp_vc140.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
@@ -133,13 +133,16 @@
     <ClInclude Include="..\Source\External\stb\stb_image_write.h" />
     <ClInclude Include="..\Source\External\str\str.hpp" />
     <ClInclude Include="..\Source\External\vectormath\vectormath.hpp" />
+    <ClInclude Include="..\Source\VkToolbox\Buffers.hpp" />
     <ClInclude Include="..\Source\VkToolbox\CommandBuffer.hpp" />
+    <ClInclude Include="..\Source\VkToolbox\DescriptorSets.hpp" />
     <ClInclude Include="..\Source\VkToolbox\FixedSizeArray.hpp" />
     <ClInclude Include="..\Source\VkToolbox\GlslShader.hpp" />
     <ClInclude Include="..\Source\VkToolbox\Hashing.hpp" />
     <ClInclude Include="..\Source\VkToolbox\Image.hpp" />
     <ClInclude Include="..\Source\VkToolbox\Log.hpp" />
     <ClInclude Include="..\Source\VkToolbox\OSWindow.hpp" />
+    <ClInclude Include="..\Source\VkToolbox\PipelineState.hpp" />
     <ClInclude Include="..\Source\VkToolbox\Pool.hpp" />
     <ClInclude Include="..\Source\VkToolbox\RenderPass.hpp" />
     <ClInclude Include="..\Source\VkToolbox\Resource.hpp" />
@@ -148,6 +151,9 @@
     <ClInclude Include="..\Source\VkToolbox\Texture.hpp" />
     <ClInclude Include="..\Source\VkToolbox\Utils.hpp" />
     <ClInclude Include="..\Source\VkToolbox\VulkanContext.hpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="..\Source\Shaders\BuiltInTriangleTest.glsl" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

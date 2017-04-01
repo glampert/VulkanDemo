@@ -1,7 +1,6 @@
 #pragma once
 
 // ================================================================================================
-// -*- C++ -*-
 // File: VkToolbox/Texture.hpp
 // Author: Guilherme R. Lampert
 // Created on: 03/01/17
@@ -29,24 +28,22 @@ public:
     Sampler(const VulkanContext & vkContext, const VkSamplerCreateInfo & samplerCreateInfo);
     ~Sampler();
 
-    void initialize(const VkSamplerCreateInfo & samplerCreateInfo);
-    void shutdown();
-    bool isInitialized() const;
-
     // Movable.
     Sampler(Sampler && other);
     Sampler & operator = (Sampler && other);
 
-    // But not copyable.
+    // Not copyable.
     Sampler(const Sampler &) = delete;
     Sampler & operator = (const Sampler &) = delete;
 
-    // Accessors:
-    VkSampler getVkSamplerHandle() const;
-    const VulkanContext & getVkContext() const;
-    const VkSamplerCreateInfo & getVkSamplerDesc() const;
+    void initialize(const VkSamplerCreateInfo & samplerCreateInfo);
+    void shutdown();
+    bool isInitialized() const;
 
-    // Implicit conversion to VkSampler.
+    VkSampler samplerHandle() const;
+    const VkSamplerCreateInfo & samplerDesc() const;
+    const VulkanContext & context() const;
+
     operator VkSampler() const { return m_samplerHandle; }
 
 private:
@@ -83,18 +80,18 @@ public:
     bool isLoaded() const override;
 
     // Accessors:
-    VkImage getVkImageHandle() const;
-    VkImageView getVkImageViewHandle() const;
-    VkDeviceMemory getVkDeviceMemoryHandle() const;
+    VkImage imageHandle() const;
+    VkImageView imageViewHandle() const;
+    VkDeviceMemory imageMemoryHandle() const;
 
     bool isMipmapped() const;
-    int getMipmapCount() const;
-    const Size2D getSize() const;
-    VkFormat getFormat() const;
-    VkImageViewType getViewType() const;
+    int mipmapCount() const;
+    const Size2D size() const;
+    VkFormat format() const;
+    VkImageViewType imageViewType() const;
 
-    static VkFormat getVkFormat(Image::Format format);
-    static Image::Format getImageFormat(VkFormat format);
+    static VkFormat toVkImageFormat(Image::Format format);
+    static Image::Format toInternalImageFormat(VkFormat format);
 
     void setGenerateMipmapsOnLoad(bool trueIfShouldGenMipmaps);
     bool generateMipmapsOnLoad() const;
@@ -127,19 +124,19 @@ inline bool Sampler::isInitialized() const
     return (m_samplerHandle != VK_NULL_HANDLE);
 }
 
-inline VkSampler Sampler::getVkSamplerHandle() const
+inline VkSampler Sampler::samplerHandle() const
 {
     return m_samplerHandle;
 }
 
-inline const VulkanContext & Sampler::getVkContext() const
-{
-    return *m_vkContext;
-}
-
-inline const VkSamplerCreateInfo & Sampler::getVkSamplerDesc() const
+inline const VkSamplerCreateInfo & Sampler::samplerDesc() const
 {
     return m_samplerDesc;
+}
+
+inline const VulkanContext & Sampler::context() const
+{
+    return *m_vkContext;
 }
 
 // ========================================================
@@ -149,17 +146,17 @@ inline bool Texture::isLoaded() const
     return (m_imageHandle != nullptr);
 }
 
-inline VkImage Texture::getVkImageHandle() const
+inline VkImage Texture::imageHandle() const
 {
     return m_imageHandle;
 }
 
-inline VkImageView Texture::getVkImageViewHandle() const
+inline VkImageView Texture::imageViewHandle() const
 {
     return m_imageViewHandle;
 }
 
-inline VkDeviceMemory Texture::getVkDeviceMemoryHandle() const
+inline VkDeviceMemory Texture::imageMemoryHandle() const
 {
     return m_imageMemHandle;
 }
@@ -169,22 +166,22 @@ inline bool Texture::isMipmapped() const
     return (m_imageMipmaps > 1);
 }
 
-inline int Texture::getMipmapCount() const
+inline int Texture::mipmapCount() const
 {
     return static_cast<int>(m_imageMipmaps);
 }
 
-inline const Size2D Texture::getSize() const
+inline const Size2D Texture::size() const
 {
     return m_imageSize;
 }
 
-inline VkFormat Texture::getFormat() const
+inline VkFormat Texture::format() const
 {
     return m_imageFormat;
 }
 
-inline VkImageViewType Texture::getViewType() const
+inline VkImageViewType Texture::imageViewType() const
 {
     return m_imageViewType;
 }

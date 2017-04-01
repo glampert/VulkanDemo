@@ -1,6 +1,5 @@
 
 // ================================================================================================
-// -*- C++ -*-
 // File: VkToolbox/Log.cpp
 // Author: Guilherme R. Lampert
 // Created on: 07/01/17
@@ -53,7 +52,7 @@ void setVerbosityLevel(const VerbosityLevel lvl)
     s_verbosityLevel = lvl;
 }
 
-VerbosityLevel getVerbosityLevel()
+VerbosityLevel verbosityLevel()
 {
     return s_verbosityLevel;
 }
@@ -66,7 +65,7 @@ void setOutputStream(FILE* stream)
     s_outputStream = stream;
 }
 
-FILE* getOutputStream()
+FILE* outputStream()
 {
     return s_outputStream;
 }

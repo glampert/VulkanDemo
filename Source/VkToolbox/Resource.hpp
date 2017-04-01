@@ -1,7 +1,6 @@
 #pragma once
 
 // ================================================================================================
-// -*- C++ -*-
 // File: VkToolbox/Resource.hpp
 // Author: Guilherme R. Lampert
 // Created on: 03/01/17
@@ -24,13 +23,23 @@ struct ResourceId final
     const str * name; // Pointer to string pool.
     Hash64      hash; // Hash of name string.
 
+    ResourceId(const str * const s, const Hash64 h)
+        : name{ s }
+        , hash{ h }
+    { }
+
+    ResourceId(const str * const s)
+        : name{ s }
+        , hash{ s->c_str(), s->length() }
+    { }
+
     bool operator == (const ResourceId & other) const { return this->hash == other.hash; }
     bool operator != (const ResourceId & other) const { return this->hash != other.hash; }
 
-    const char * getName() const { return name->c_str(); }
-    bool isNull() const { return hash.isNull(); }
+    const char * c_str() const { return name->c_str(); }
+    bool isNull() const        { return hash.isNull(); }
 
-    static ResourceId getNull();
+    static ResourceId null();
 };
 
 // ========================================================
@@ -62,8 +71,8 @@ public:
     virtual bool isShutdown() const;
 
     // Common accessors:
-    const VulkanContext & getVkContext() const;
-    const ResourceId & getId() const;
+    const VulkanContext & context() const;
+    const ResourceId & resourceId() const;
 
 protected:
 
@@ -77,18 +86,24 @@ protected:
 
 // ========================================================
 
+inline Resource::Resource(const VulkanContext * vkContext, const ResourceId id)
+    : m_vkContext{ vkContext }
+    , m_resId{ id }
+{
+}
+
 inline bool Resource::isShutdown() const
 {
     return (m_vkContext == nullptr);
 }
 
-inline const VulkanContext & Resource::getVkContext() const
+inline const VulkanContext & Resource::context() const
 {
     assert(m_vkContext != nullptr);
     return *m_vkContext;
 }
 
-inline const ResourceId & Resource::getId() const
+inline const ResourceId & Resource::resourceId() const
 {
     return m_resId;
 }
