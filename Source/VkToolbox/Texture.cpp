@@ -16,23 +16,6 @@ namespace VkToolbox
 // class Sampler:
 // ========================================================
 
-Sampler::Sampler(const VulkanContext & vkContext)
-    : m_vkContext{ &vkContext }
-    , m_samplerDesc{}
-{
-}
-
-Sampler::Sampler(const VulkanContext & vkContext, const VkSamplerCreateInfo & samplerCreateInfo)
-    : m_vkContext{ &vkContext }
-{
-    initialize(samplerCreateInfo);
-}
-
-Sampler::~Sampler()
-{
-    shutdown();
-}
-
 Sampler::Sampler(Sampler && other)
     : m_vkContext{ other.m_vkContext }
     , m_samplerHandle{ other.m_samplerHandle }
@@ -91,11 +74,6 @@ Texture::Texture(const VulkanContext & vkContext, ResourceId id)
     , m_imageMipmaps{ 0 }
     , m_dontGenMipmaps{ false }
 {
-}
-
-Texture::~Texture()
-{
-    Texture::shutdown();
 }
 
 Texture::Texture(Texture && other)

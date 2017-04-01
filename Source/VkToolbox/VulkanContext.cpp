@@ -1294,6 +1294,27 @@ bool AutoFence::isSignaled() const
 }
 
 // ========================================================
+// class RenderPass:
+// ========================================================
+
+void RenderPass::initialize(const VkRenderPassCreateInfo & rpCreateInfo)
+{
+    assert(!isInitialized());
+    VKTB_CHECK(vkCreateRenderPass(m_vkContext->deviceHandle(), &rpCreateInfo,
+                                  m_vkContext->allocationCallbacks(), &m_renderPassHandle));
+}
+
+void RenderPass::shutdown()
+{
+    if (m_renderPassHandle != VK_NULL_HANDLE)
+    {
+        vkDestroyRenderPass(m_vkContext->deviceHandle(), m_renderPassHandle,
+                            m_vkContext->allocationCallbacks());
+        m_renderPassHandle = VK_NULL_HANDLE;
+    }
+}
+
+// ========================================================
 // Helpers free functions:
 // ========================================================
 

@@ -40,10 +40,10 @@ public:
     void shutdown();
     bool isInitialized() const;
 
-    VkSampler samplerHandle() const;
-    const VkSamplerCreateInfo & samplerDesc() const;
-    const VulkanContext & context() const;
+    const VulkanContext & context() const { return *m_vkContext; }
+    const VkSamplerCreateInfo & samplerDesc() const { return m_samplerDesc; }
 
+    VkSampler samplerHandle() const { return m_samplerHandle; }
     operator VkSampler() const { return m_samplerHandle; }
 
 private:
@@ -118,28 +118,39 @@ private:
 };
 
 // ========================================================
+// Sampler inline methods:
+// ========================================================
+
+inline Sampler::Sampler(const VulkanContext & vkContext)
+    : m_vkContext{ &vkContext }
+    , m_samplerDesc{}
+{
+}
+
+inline Sampler::Sampler(const VulkanContext & vkContext, const VkSamplerCreateInfo & samplerCreateInfo)
+    : m_vkContext{ &vkContext }
+{
+    initialize(samplerCreateInfo);
+}
+
+inline Sampler::~Sampler()
+{
+    shutdown();
+}
 
 inline bool Sampler::isInitialized() const
 {
     return (m_samplerHandle != VK_NULL_HANDLE);
 }
 
-inline VkSampler Sampler::samplerHandle() const
-{
-    return m_samplerHandle;
-}
-
-inline const VkSamplerCreateInfo & Sampler::samplerDesc() const
-{
-    return m_samplerDesc;
-}
-
-inline const VulkanContext & Sampler::context() const
-{
-    return *m_vkContext;
-}
-
 // ========================================================
+// Texture inline methods:
+// ========================================================
+
+inline Texture::~Texture()
+{
+    Texture::shutdown();
+}
 
 inline bool Texture::isLoaded() const
 {

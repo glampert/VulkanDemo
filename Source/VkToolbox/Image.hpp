@@ -226,12 +226,12 @@ public:
     // Access the pixel data as an opaque array
     // of bytes (fist surface/level only):
     const std::uint8_t * pixelDataBaseSurface() const;
-          std::uint8_t * pixelDataBaseSurface();
+    std::uint8_t * pixelDataBaseSurface();
 
     // Surface access:
     int surfaceCount() const;
     const ImageSurface & surface(int surfaceIndex) const;
-          ImageSurface & surface(int surfaceIndex);
+    ImageSurface & surface(int surfaceIndex);
 
     // Frees all memory and resets the object to initial states (an invalid image).
     void shutdown();
@@ -366,6 +366,8 @@ private:
     FixedSizeArray<ImageSurface, MaxSurfaces> m_surfaces;
 };
 
+// ========================================================
+// Image inline methods:
 // ========================================================
 
 inline Image::Image(const Size2D wh, const Format fmt)
@@ -552,6 +554,8 @@ inline void Image::forEveryPixel(Func && fn, const int surfaceIndex)
     }
 }
 
+// ========================================================
+// Color32 inline methods:
 // ========================================================
 
 inline Color32::Color32()

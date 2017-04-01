@@ -109,13 +109,13 @@ using TextureManager = ResourceManager<Texture>;
 // ========================================================
 
 template<typename T>
-ResourceManager<T>::ResourceManager(const VulkanContext & vkContext)
+inline ResourceManager<T>::ResourceManager(const VulkanContext & vkContext)
     : m_vkContext{ &vkContext }
 {
 }
 
 template<typename T>
-typename ResourceManager<T>::ResourceIndex ResourceManager<T>::createNewSlot(const ResourceId id)
+inline typename ResourceManager<T>::ResourceIndex ResourceManager<T>::createNewSlot(const ResourceId id)
 {
     m_resourcesStore.emplace_back(*m_vkContext, id);
     const auto index = narrowCast<ResourceIndex>(m_resourcesStore.size() - 1);
@@ -124,7 +124,7 @@ typename ResourceManager<T>::ResourceIndex ResourceManager<T>::createNewSlot(con
 }
 
 template<typename T>
-void ResourceManager<T>::preallocate(const int resourceCount)
+inline void ResourceManager<T>::preallocate(const int resourceCount)
 {
     if (resourceCount > 0)
     {
@@ -133,7 +133,7 @@ void ResourceManager<T>::preallocate(const int resourceCount)
 }
 
 template<typename T>
-bool ResourceManager<T>::findLoaded(const ResourceId inResId, ResourceIndex * outResIndex) const
+inline bool ResourceManager<T>::findLoaded(const ResourceId inResId, ResourceIndex * outResIndex) const
 {
     assert(!inResId.isNull());
     assert(outResIndex != nullptr);
@@ -160,7 +160,7 @@ bool ResourceManager<T>::findLoaded(const ResourceId inResId, ResourceIndex * ou
 }
 
 template<typename T>
-bool ResourceManager<T>::findOrLoad(const ResourceId inResId, ResourceIndex * outResIndex)
+inline bool ResourceManager<T>::findOrLoad(const ResourceId inResId, ResourceIndex * outResIndex)
 {
     assert(!inResId.isNull());
     assert(outResIndex != nullptr);
@@ -182,7 +182,7 @@ bool ResourceManager<T>::findOrLoad(const ResourceId inResId, ResourceIndex * ou
 }
 
 template<typename T>
-bool ResourceManager<T>::registerSlot(const ResourceId inResId, ResourceIndex * outResIndex)
+inline bool ResourceManager<T>::registerSlot(const ResourceId inResId, ResourceIndex * outResIndex)
 {
     assert(!inResId.isNull());
     assert(outResIndex != nullptr);
@@ -203,7 +203,7 @@ bool ResourceManager<T>::registerSlot(const ResourceId inResId, ResourceIndex * 
 }
 
 template<typename T>
-bool ResourceManager<T>::isRegistered(const ResourceId inResId) const
+inline bool ResourceManager<T>::isRegistered(const ResourceId inResId) const
 {
     assert(!inResId.isNull());
     const auto index = m_resourcesLookupTable.find(inResId.hash.value, inResId, m_resourcesStore,
@@ -214,25 +214,25 @@ bool ResourceManager<T>::isRegistered(const ResourceId inResId) const
 }
 
 template<typename T>
-bool ResourceManager<T>::isLoaded(const ResourceIndex resIndex) const
+inline bool ResourceManager<T>::isLoaded(const ResourceIndex resIndex) const
 {
     return resourceRef(resIndex).isLoaded();
 }
 
 template<typename T>
-bool ResourceManager<T>::reload(const ResourceIndex resIndex)
+inline bool ResourceManager<T>::reload(const ResourceIndex resIndex)
 {
     return mutableResourceRef(resIndex).load();
 }
 
 template<typename T>
-void ResourceManager<T>::unload(const ResourceIndex resIndex)
+inline void ResourceManager<T>::unload(const ResourceIndex resIndex)
 {
     mutableResourceRef(resIndex).unload();
 }
 
 template<typename T>
-void ResourceManager<T>::reloadAll(int * outNumReloaded, int * outNumFailed)
+inline void ResourceManager<T>::reloadAll(int * outNumReloaded, int * outNumFailed)
 {
     int numReloaded = 0;
     int numFailed   = 0;
@@ -254,7 +254,7 @@ void ResourceManager<T>::reloadAll(int * outNumReloaded, int * outNumFailed)
 }
 
 template<typename T>
-void ResourceManager<T>::unloadAll()
+inline void ResourceManager<T>::unloadAll()
 {
     for (auto & resource : m_resourcesStore)
     {
@@ -263,7 +263,7 @@ void ResourceManager<T>::unloadAll()
 }
 
 template<typename T>
-void ResourceManager<T>::unregisterAll()
+inline void ResourceManager<T>::unregisterAll()
 {
     unloadAll();
     m_resourcesLookupTable.clear();
@@ -271,29 +271,31 @@ void ResourceManager<T>::unregisterAll()
 }
 
 template<typename T>
-int ResourceManager<T>::resourceCount() const
+inline int ResourceManager<T>::resourceCount() const
 {
     return narrowCast<int>(m_resourcesStore.size());
 }
 
 template<typename T>
-const T & ResourceManager<T>::resourceRef(const ResourceIndex resIndex) const
+inline const T & ResourceManager<T>::resourceRef(const ResourceIndex resIndex) const
 {
     assert(resIndex < m_resourcesStore.size());
     return m_resourcesStore[resIndex];
 }
 
 template<typename T>
-T & ResourceManager<T>::mutableResourceRef(ResourceIndex resIndex)
+inline T & ResourceManager<T>::mutableResourceRef(ResourceIndex resIndex)
 {
     assert(resIndex < m_resourcesStore.size());
     return m_resourcesStore[resIndex];
 }
 
 template<typename T>
-const VulkanContext & ResourceManager<T>::context() const
+inline const VulkanContext & ResourceManager<T>::context() const
 {
     return *m_vkContext;
 }
+
+// ========================================================
 
 } // namespace VkToolbox

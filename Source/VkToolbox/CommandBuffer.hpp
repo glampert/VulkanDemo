@@ -35,10 +35,10 @@ public:
     bool isInitialized() const;
     void reset() const;
 
-    int queueFamilyIndex() const;
-    VkCommandPool commandPoolHandle() const;
-    const VulkanContext & context() const;
+    const VulkanContext & context() const { return *m_vkContext; }
+    int queueFamilyIndex() const { return m_queueFamilyIndex; }
 
+    VkCommandPool commandPoolHandle() const { return m_cmdPoolHandle; }
     operator VkCommandPool() const { return m_cmdPoolHandle; }
 
 private:
@@ -81,10 +81,10 @@ public:
     // Submit and waits on a fence. Fence sourced from the context's main fence cache.
     void submitAndWaitComplete(VkQueue queue) const;
 
-    VkCommandPool commandPoolHandle() const;
-    VkCommandBuffer commandBufferHandle() const;
-    const VulkanContext & context() const;
+    const VulkanContext & context() const { return *m_vkContext; }
+    VkCommandPool commandPoolHandle() const { return m_cmdPoolHandle; }
 
+    VkCommandBuffer commandBufferHandle() const { return m_cmdBufferHandle; }
     operator VkCommandBuffer() const { return m_cmdBufferHandle; }
 
 private:
@@ -102,47 +102,57 @@ private:
 };
 
 // ========================================================
+// CommandPool inline methods:
+// ========================================================
+
+inline CommandPool::CommandPool(const VulkanContext & vkContext)
+    : m_vkContext{ &vkContext }
+{
+}
+
+inline CommandPool::CommandPool(const VulkanContext & vkContext,
+                                const VkCommandPoolCreateFlags flags,
+                                const int queueFamilyIndex)
+    : m_vkContext{ &vkContext }
+{
+    initialize(flags, queueFamilyIndex);
+}
+
+inline CommandPool::~CommandPool()
+{
+    shutdown();
+}
 
 inline bool CommandPool::isInitialized() const
 {
     return (m_cmdPoolHandle != VK_NULL_HANDLE);
 }
 
-inline int CommandPool::queueFamilyIndex() const
-{
-    return m_queueFamilyIndex;
-}
-
-inline VkCommandPool CommandPool::commandPoolHandle() const
-{
-    return m_cmdPoolHandle;
-}
-
-inline const VulkanContext & CommandPool::context() const
-{
-    return *m_vkContext;
-}
-
 // ========================================================
+// CommandBuffer inline methods:
+// ========================================================
+
+inline CommandBuffer::CommandBuffer(const VulkanContext & vkContext)
+    : m_vkContext{ &vkContext }
+{
+}
+
+inline CommandBuffer::CommandBuffer(const VulkanContext & vkContext,
+                                    const VkCommandBufferLevel lvl,
+                                    VkCommandPool pool)
+    : m_vkContext{ &vkContext }
+{
+    initialize(lvl, pool);
+}
+
+inline CommandBuffer::~CommandBuffer()
+{
+    shutdown();
+}
 
 inline bool CommandBuffer::isInitialized() const
 {
     return (m_cmdBufferHandle != VK_NULL_HANDLE);
-}
-
-inline VkCommandPool CommandBuffer::commandPoolHandle() const
-{
-    return m_cmdPoolHandle;
-}
-
-inline VkCommandBuffer CommandBuffer::commandBufferHandle() const
-{
-    return m_cmdBufferHandle;
-}
-
-inline const VulkanContext & CommandBuffer::context() const
-{
-    return *m_vkContext;
 }
 
 inline bool CommandBuffer::isInRecordingState() const

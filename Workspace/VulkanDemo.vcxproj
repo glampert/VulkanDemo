@@ -111,7 +111,6 @@
     <ClCompile Include="..\Source\VkToolbox\Image.cpp" />
     <ClCompile Include="..\Source\VkToolbox\Log.cpp" />
     <ClCompile Include="..\Source\VkToolbox\OSWindow.cpp" />
-    <ClCompile Include="..\Source\VkToolbox\RenderPass.cpp" />
     <ClCompile Include="..\Source\VkToolbox\Resource.cpp" />
     <ClCompile Include="..\Source\VkToolbox\ResourceManager.cpp" />
     <ClCompile Include="..\Source\VkToolbox\Texture.cpp" />

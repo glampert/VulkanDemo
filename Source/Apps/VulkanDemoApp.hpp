@@ -39,12 +39,18 @@ public:
     VulkanDemoApp(const StartupOptions & options);
     virtual ~VulkanDemoApp();
 
+    VulkanDemoApp(const VulkanDemoApp &) = delete;
+    VulkanDemoApp & operator = (const VulkanDemoApp &) = delete;
+
     virtual void onRunMainLoop();
     virtual void onFrameUpdate();
     virtual void onResizeWindow(const VkToolbox::Size2D newSize);
 
-    VulkanDemoApp(const VulkanDemoApp &) = delete;
-    VulkanDemoApp & operator = (const VulkanDemoApp &) = delete;
+    inline VkToolbox::OSWindow       & window()  { return m_window;        }
+    inline VkToolbox::VulkanContext  & context() { return m_vkContext;     }
+    inline VkToolbox::StringRegistry & strReg()  { return m_strRegistry;   }
+    inline cfg::CVarManager          & cvarMgr() { return *sm_cvarManager; }
+    inline cfg::CommandManager       & cmdMgr()  { return *sm_cmdManager;  }
 
 protected:
 

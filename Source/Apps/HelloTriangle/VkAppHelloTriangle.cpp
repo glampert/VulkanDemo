@@ -37,7 +37,7 @@ private:
     Fence *                  m_currentCmdBufferFence = nullptr;
     int                      m_nextCmdBufferIndex    = 0;
 
-    // Shader draws a triangle using built-in vertices, so we don't need to create a VB/IB for this demo.
+    // Shader draws a triangle using built-in vertexes, so we don't need to create a VB/IB for this demo.
     const char * m_shaderFilename = VKTB_SHADER_SOURCE_PATH "BuiltInTriangleTest.glsl";
     GlslShader   m_shaderProgram;
 
@@ -85,28 +85,28 @@ VULKAN_DEMO_REGISTER_APP(VkAppHelloTriangle);
 
 VkAppHelloTriangle::VkAppHelloTriangle(const StartupOptions & options)
     : VulkanDemoApp{ options }
-    , m_cmdPool{ m_vkContext }
-    , m_shaderProgram{ m_vkContext, m_strRegistry.access(m_shaderFilename) }
-    , m_uniformBuffer{ m_vkContext }
-    , m_descriptorSetPool{ m_vkContext }
-    , m_descriptorSetLayout{ m_vkContext }
-    , m_pipelineStateLayout{ m_vkContext }
+    , m_cmdPool{ context() }
+    , m_shaderProgram{ context(), strReg().access(m_shaderFilename) }
+    , m_uniformBuffer{ context() }
+    , m_descriptorSetPool{ context() }
+    , m_descriptorSetLayout{ context() }
+    , m_pipelineStateLayout{ context() }
     , m_pipelineState{ m_pipelineStateLayout }
 {
     m_shaderProgram.load();
 
     m_uniformBuffer.initialize(m_uniformBufferTypeCounts);
-    m_cmdPool.initialize(VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT, m_vkContext.graphisQueue().familyIndex);
+    m_cmdPool.initialize(VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT, context().graphisQueue().familyIndex);
 
     for (std::size_t i = 0; i < m_cmdBuffers.size(); ++i)
     {
-        m_cmdBuffers[i].reset(new CommandBuffer{ m_vkContext, VK_COMMAND_BUFFER_LEVEL_PRIMARY, m_cmdPool });
+        m_cmdBuffers[i].reset(new CommandBuffer{ context(), VK_COMMAND_BUFFER_LEVEL_PRIMARY, m_cmdPool });
     }
     m_currentCmdBuffer = m_cmdBuffers[0].get();
 
     for (std::size_t i = 0; i < m_cmdBufferFences.size(); ++i)
     {
-        m_cmdBufferFences[i].reset(new Fence{ m_vkContext, VK_FENCE_CREATE_SIGNALED_BIT });
+        m_cmdBufferFences[i].reset(new Fence{ context(), VK_FENCE_CREATE_SIGNALED_BIT });
     }
     m_currentCmdBufferFence = m_cmdBufferFences[0].get();
 
@@ -174,14 +174,14 @@ void VkAppHelloTriangle::initPipeline()
     m_pipelineStateLayout.initialize(make_array_view(setLayouts));
 
     PipelineStateBuilder psoBuilder;
-    const Size2D fbSize = m_vkContext.framebufferSize();
+    const Size2D fbSize = context().framebufferSize();
 
     psoBuilder.viewport.width           = static_cast<float>(fbSize.width);
     psoBuilder.viewport.height          = static_cast<float>(fbSize.height);
     psoBuilder.scissor.extent.width     = fbSize.width;
     psoBuilder.scissor.extent.height    = fbSize.height;
     psoBuilder.pipelineState.layout     = m_pipelineStateLayout;
-    psoBuilder.pipelineState.renderPass = m_vkContext.mainRenderPass();
+    psoBuilder.pipelineState.renderPass = context().mainRenderPass();
     psoBuilder.pipelineState.stageCount = m_shaderProgram.pipelineStages(&psoBuilder.shaderPipelineStages);
 
     m_pipelineState.initialize(psoBuilder);
@@ -221,23 +221,23 @@ void VkAppHelloTriangle::prepareCommandBuffer(CommandBuffer & cmdBuff)
 
     updateUniformBuffer(cmdBuff);
 
-    m_vkContext.beginRenderPass(cmdBuff);
+    context().beginRenderPass(cmdBuff);
 
-    m_vkContext.bindGraphicsPipelineState(cmdBuff, m_pipelineState);
+    context().bindGraphicsPipelineState(cmdBuff, m_pipelineState);
 
-    m_vkContext.bindGraphicsDescriptorSets(cmdBuff, m_pipelineStateLayout,
-                                           make_array_view(m_descriptorSet.descriptorSetHandles));
+    const auto descriptorSet = make_array_view(m_descriptorSet.descriptorSetHandles);
+    context().bindGraphicsDescriptorSets(cmdBuff, m_pipelineStateLayout, descriptorSet);
 
-    m_vkContext.drawUnindexed(cmdBuff, 3, 1, 0, 0);
+    context().drawUnindexed(cmdBuff, 3, 1, 0, 0);
 
-    m_vkContext.endRenderPass(cmdBuff);
+    context().endRenderPass(cmdBuff);
 
     cmdBuff.endRecording();
 }
 
 void VkAppHelloTriangle::onFrameUpdate()
 {
-    m_vkContext.beginFrame();
+    context().beginFrame();
 
     m_currentCmdBufferFence->wait(InfiniteFenceWaitTimeout);
     m_currentCmdBufferFence->reset();
@@ -248,7 +248,7 @@ void VkAppHelloTriangle::onFrameUpdate()
     VkCommandBuffer cbHandle = m_currentCmdBuffer->commandBufferHandle();
     const auto submitBuffers = make_array_view(&cbHandle, 1);
 
-    m_vkContext.endFrame(submitBuffers, m_currentCmdBufferFence->fenceHandle());
+    context().endFrame(submitBuffers, m_currentCmdBufferFence->fenceHandle());
 
     // Grab the next buffer in the chain:
     m_nextCmdBufferIndex    = (m_nextCmdBufferIndex + 1) % m_cmdBuffers.size();

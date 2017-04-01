@@ -64,9 +64,6 @@
     <ClCompile Include="..\Source\VkToolbox\CommandBuffer.cpp">
       <Filter>Source Files\VkToolbox</Filter>
     </ClCompile>
-    <ClCompile Include="..\Source\VkToolbox\RenderPass.cpp">
-      <Filter>Source Files\VkToolbox</Filter>
-    </ClCompile>
     <ClCompile Include="..\Source\Apps\Main.cpp">
       <Filter>Source Files\Apps</Filter>
     </ClCompile>

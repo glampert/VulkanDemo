@@ -4,7 +4,7 @@
 // File: VkToolbox/RenderPass.hpp
 // Author: Guilherme R. Lampert
 // Created on: 24/03/17
-// Brief: Vulkan render pass wrapper.
+// Brief: Vulkan Render Pass wrapper.
 // ================================================================================================
 
 #include <vulkan/vulkan.h>
@@ -34,9 +34,8 @@ public:
     void shutdown();
     bool isInitialized() const;
 
-    VkRenderPass renderPassHandle() const;
-    const VulkanContext & context() const;
-
+    const VulkanContext & context() const { return *m_vkContext; }
+    VkRenderPass renderPassHandle() const { return m_renderPassHandle; }
     operator VkRenderPass() const { return m_renderPassHandle; }
 
 private:
@@ -46,20 +45,28 @@ private:
 };
 
 // ========================================================
+// RenderPass inline methods:
+// ========================================================
+
+inline RenderPass::RenderPass(const VulkanContext & vkContext)
+    : m_vkContext{ &vkContext }
+{
+}
+
+inline RenderPass::RenderPass(const VulkanContext & vkContext, const VkRenderPassCreateInfo & rpCreateInfo)
+    : m_vkContext{ &vkContext }
+{
+    initialize(rpCreateInfo);
+}
+
+inline RenderPass::~RenderPass()
+{
+    shutdown();
+}
 
 inline bool RenderPass::isInitialized() const
 {
     return (m_renderPassHandle != VK_NULL_HANDLE);
-}
-
-inline VkRenderPass RenderPass::renderPassHandle() const
-{
-    return m_renderPassHandle;
-}
-
-inline const VulkanContext & RenderPass::context() const
-{
-    return *m_vkContext;
 }
 
 // ========================================================

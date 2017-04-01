@@ -16,22 +16,6 @@ namespace VkToolbox
 // class CommandPool:
 // ========================================================
 
-CommandPool::CommandPool(const VulkanContext & vkContext)
-    : m_vkContext{ &vkContext }
-{
-}
-
-CommandPool::CommandPool(const VulkanContext & vkContext, const VkCommandPoolCreateFlags flags, const int queueFamilyIndex)
-    : m_vkContext{ &vkContext }
-{
-    initialize(flags, queueFamilyIndex);
-}
-
-CommandPool::~CommandPool()
-{
-    shutdown();
-}
-
 void CommandPool::initialize(const VkCommandPoolCreateFlags flags, const int queueFamilyIndex)
 {
     assert(!isInitialized()); // Prevent double init
@@ -67,22 +51,6 @@ void CommandPool::reset() const
 // ========================================================
 // class CommandBuffer:
 // ========================================================
-
-CommandBuffer::CommandBuffer(const VulkanContext & vkContext)
-    : m_vkContext{ &vkContext }
-{
-}
-
-CommandBuffer::CommandBuffer(const VulkanContext & vkContext, const VkCommandBufferLevel lvl, VkCommandPool pool)
-    : m_vkContext{ &vkContext }
-{
-    initialize(lvl, pool);
-}
-
-CommandBuffer::~CommandBuffer()
-{
-    shutdown();
-}
 
 void CommandBuffer::initialize(const VkCommandBufferLevel lvl, VkCommandPool pool)
 {
