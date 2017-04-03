@@ -19,8 +19,11 @@ cfg::CVar * g_smoketestRunOnly      = nullptr;
 // ========================================================
 // Static vars/methods:
 
-cfg::CVarManager    * VulkanDemoApp::sm_cvarManager = nullptr;
-cfg::CommandManager * VulkanDemoApp::sm_cmdManager  = nullptr;
+cfg::CVarManager    * VulkanDemoApp::sm_cvarManager  = nullptr;
+cfg::CommandManager * VulkanDemoApp::sm_cmdManager   = nullptr;
+float                 VulkanDemoApp::sm_deltaTimeSec = 0.0f;
+std::int64_t          VulkanDemoApp::sm_deltaTimeMs  = 0;
+TimePoint             VulkanDemoApp::sm_startTime    = {};
 
 std::unique_ptr<VulkanDemoApp> VulkanDemoApp::create(const int argc, const char * argv[])
 {
@@ -93,6 +96,7 @@ std::vector<VulkanDemoApp::AppClassFactory> & VulkanDemoApp::factoriesList()
 
 void VulkanDemoApp::initClass()
 {
+    sm_startTime   = std::chrono::high_resolution_clock::now();
     sm_cvarManager = cfg::CVarManager::createInstance();
     sm_cmdManager  = cfg::CommandManager::createInstance(0, sm_cvarManager);
 
@@ -151,12 +155,19 @@ VulkanDemoApp::VulkanDemoApp(const StartupOptions & options)
     static bool s_smoketestRun = g_smoketestRunOnly->getBoolValue();
     m_window.onRedraw = [this]()
     {
+        const auto t0 = timeMilliseconds();
+
         onFrameUpdate();
         if (s_smoketestRun)
         {
             m_window.setStopEventLoop(true);
             VkToolbox::Log::debugF("Smoke test frame completed - quitting.");
         }
+
+        const auto t1 = timeMilliseconds();
+
+        sm_deltaTimeMs  = t1 - t0;
+        sm_deltaTimeSec = sm_deltaTimeMs * 0.001f;
     };
 }
 

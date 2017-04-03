@@ -58,72 +58,74 @@ using StagingBufferVB = StagingBuffer<VK_BUFFER_USAGE_VERTEX_BUFFER_BIT>;
 using StagingBufferIB = StagingBuffer<VK_BUFFER_USAGE_INDEX_BUFFER_BIT>;
 
 // ========================================================
-// class ShaderUniformBuffer:
+// class PersistentlyMappedBuffer:
 // ========================================================
 
-// Persistently mapped buffer for shader uniform variables (AKA Constant Buffers in DX lingo).
-class ShaderUniformBuffer
-    : public StagingBufferUB
+template<typename BaseBuffer>
+class PersistentlyMappedBuffer
+    : public BaseBuffer
 {
 public:
 
-    explicit ShaderUniformBuffer(const VulkanContext & vkContext) // Uninitialized - unmapped
-        : StagingBufferUB{ vkContext }
+    explicit PersistentlyMappedBuffer(const VulkanContext & vkContext) // Uninitialized - unmapped
+        : BaseBuffer{ vkContext }
     { }
 
-    ShaderUniformBuffer(const VulkanContext & vkContext, const int sizeBytes)
-        : StagingBufferUB{ vkContext, sizeBytes }
+    PersistentlyMappedBuffer(const VulkanContext & vkContext, const int sizeBytes)
+        : BaseBuffer{ vkContext, sizeBytes }
     {
         mapMemory();
     }
 
-    ~ShaderUniformBuffer()
+    ~PersistentlyMappedBuffer()
     {
         unmapMemory();
     }
 
     void initialize(const int sizeBytes)
     {
-        StagingBufferUB::initialize(sizeBytes);
+        BaseBuffer::initialize(sizeBytes);
         mapMemory();
     }
 
     void writeBytes(const void * data, const int sizeBytes, const int offsetBytes = 0)
     {
         assert(m_mappedPtr != nullptr && data != nullptr);
-        assert(sizeBytes > 0 && sizeBytes <= StagingBufferUB::bufferSizeBytes() - offsetBytes);
+        assert(sizeBytes > 0 && sizeBytes <= BaseBuffer::bufferSizeBytes() - offsetBytes);
         std::memcpy(static_cast<std::uint8_t *>(m_mappedPtr) + offsetBytes, data, sizeBytes);
     }
 
     void mapMemory()
     {
         assert(m_mappedPtr == nullptr);
-        VKTB_CHECK(vkMapMemory(StagingBufferUB::context().deviceHandle(),
-                               StagingBufferUB::stagingBufferMemoryHandle(),
-                               0, StagingBufferUB::bufferSizeBytes(), 0, &m_mappedPtr));
+        VKTB_CHECK(vkMapMemory(BaseBuffer::context().deviceHandle(),
+                               BaseBuffer::stagingBufferMemoryHandle(),
+                               0, BaseBuffer::bufferSizeBytes(), 0, &m_mappedPtr));
     }
 
     void unmapMemory()
     {
-        vkUnmapMemory(StagingBufferUB::context().deviceHandle(),
-                      StagingBufferUB::stagingBufferMemoryHandle());
+        vkUnmapMemory(BaseBuffer::context().deviceHandle(),
+                      BaseBuffer::stagingBufferMemoryHandle());
         m_mappedPtr = nullptr;
     }
 
-    void * mappedPointer() const
-    {
-        return m_mappedPtr;
-    }
-
-    operator VkBuffer() const
-    {
-        return StagingBufferUB::bufferHandle();
-    }
+    void * mappedPointer() const { return m_mappedPtr; }
+    operator VkBuffer()    const { return BaseBuffer::bufferHandle(); }
 
 private:
 
     void * m_mappedPtr = nullptr;
 };
+
+// ========================================================
+
+// Persistently mapped buffer for shader uniform variables (AKA Constant Buffers in DX lingo).
+using ShaderUniformBuffer = PersistentlyMappedBuffer<StagingBufferUB>;
+
+// Persistently mapped buffer types for vertex and index buffers:
+using VertexBuffer = PersistentlyMappedBuffer<StagingBufferVB>;
+using IndexBuffer  = PersistentlyMappedBuffer<StagingBufferIB>;
 
 // ========================================================
 // template class StructuredShaderUniformBuffer:
@@ -253,6 +255,67 @@ private:
     int m_paddedElemSize;
     int calcPaddedBufferSize(const VulkanContext & vkContext, const int elemCounts[TypeCount], bool doPad);
 };
+
+// ========================================================
+// template class GenericStructuredBuffer:
+// ========================================================
+
+template<typename T, typename BaseBuffer>
+class GenericStructuredBuffer final
+    : public BaseBuffer
+{
+public:
+
+    explicit GenericStructuredBuffer(const VulkanContext & vkContext) // Uninitialized - unmapped
+        : BaseBuffer{ vkContext }
+    { }
+
+    GenericStructuredBuffer(const VulkanContext & vkContext, const int sizeInElems)
+        : BaseBuffer{ vkContext, sizeInElems * sizeof(T) }
+    { }
+
+    void initialize(const int sizeInElems)
+    {
+        BaseBuffer::initialize(sizeInElems * sizeof(T));
+    }
+
+    void write(const T & payload, const int offsetInElems = 0)
+    {
+        BaseBuffer::writeBytes(&payload, sizeof(T), offsetInElems * sizeof(T));
+    }
+
+    void writeN(array_view<const T> payload, int offsetInElems = 0)
+    {
+        const int totalSizeBytes = narrowCast<int>(payload.size_bytes());
+        BaseBuffer::writeBytes(payload.data(), totalSizeBytes, offsetInElems * sizeof(T));
+    }
+
+    template<typename T, std::size_t Size>
+    void writeN(const T (&payload)[Size])
+    {
+        return writeN(make_array_view(payload, Size));
+    }
+
+    int elementCount() const
+    {
+        return BaseBuffer::bufferSizeBytes() / sizeof(T);
+    }
+
+    static constexpr int elementSizeBytes()
+    {
+        return sizeof(T);
+    }
+};
+
+// ========================================================
+
+template<typename T> using StructuredVertexBuffer = GenericStructuredBuffer<T, VertexBuffer>;
+template<typename T> using StructuredIndexBuffer  = GenericStructuredBuffer<T, IndexBuffer>;
+
+// ========================================================
+
+inline VkIndexType vkIndexTypeForBuffer(const StructuredIndexBuffer<std::uint16_t> &) { return VK_INDEX_TYPE_UINT16; }
+inline VkIndexType vkIndexTypeForBuffer(const StructuredIndexBuffer<std::uint32_t> &) { return VK_INDEX_TYPE_UINT32; }
 
 // ========================================================
 // StagingBuffer inline methods:

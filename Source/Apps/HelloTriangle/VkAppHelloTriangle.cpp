@@ -6,9 +6,6 @@
 // Brief: Draws a triangle without using vertex or index buffer - data is embedded into the shader.
 // ================================================================================================
 
-#include <cmath>
-#include <chrono>
-
 #include "Apps/VulkanDemoApp.hpp"
 #include "VkToolbox/DescriptorSets.hpp"
 #include "VkToolbox/PipelineState.hpp"
@@ -189,11 +186,8 @@ void VkAppHelloTriangle::initPipeline()
 
 void VkAppHelloTriangle::updateUniformBuffer(CommandBuffer & cmdBuff)
 {
-    static auto startTime = std::chrono::high_resolution_clock::now();
     static int colorIndex = 0;
-
-    auto currentTime = std::chrono::high_resolution_clock::now();
-    const float time = std::chrono::duration_cast<std::chrono::milliseconds>(currentTime - startTime).count() / 1000.0f;
+    const float time = timeSeconds();
 
     // Make the triangle colors flash using a sine wave
     const float s = std::abs(std::sin(time * HalfPI));

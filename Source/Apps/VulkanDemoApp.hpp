@@ -12,6 +12,9 @@
 #include "VkToolbox/VulkanContext.hpp"
 #include "VkToolbox/StringRegistry.hpp"
 
+#include <chrono>
+using TimePoint = std::chrono::time_point<std::chrono::high_resolution_clock>;
+
 // ========================================================
 // class VulkanDemoApp:
 // ========================================================
@@ -35,6 +38,19 @@ public:
 
     static void initClass();
     static void shutdownClass();
+
+    static std::int64_t timeMilliseconds()
+    {
+        const auto currentTime = std::chrono::high_resolution_clock::now();
+        return std::chrono::duration_cast<std::chrono::milliseconds>(currentTime - sm_startTime).count();
+    }
+    static float timeSeconds()
+    {
+        return timeMilliseconds() * 0.001f;
+    }
+
+    static std::int64_t deltaTimeMilliseconds() { return sm_deltaTimeMs;  }
+    static float        deltaTimeSeconds()      { return sm_deltaTimeSec; }
 
     VulkanDemoApp(const StartupOptions & options);
     virtual ~VulkanDemoApp();
@@ -71,6 +87,10 @@ private:
 
     static const AppClassFactory * findAppFactory(const char * appClassName);
     static std::vector<AppClassFactory> & factoriesList();
+
+    static float        sm_deltaTimeSec;
+    static std::int64_t sm_deltaTimeMs;
+    static TimePoint    sm_startTime;
 };
 
 // ========================================================

@@ -85,6 +85,7 @@ public:
     VkFramebuffer framebufferHandle(int index) const;
     Size2D renderWindowSize()   const;
     Size2D framebufferSize()    const;
+    float framebufferAspect()   const;
     std::uint32_t frameNumber() const;
     int swapChainBufferIndex()  const;
     int swapChainBufferCount()  const;
@@ -108,6 +109,9 @@ public:
     void bindGraphicsPipelineState(const CommandBuffer & cmdBuff, VkPipeline pipeline) const;
     void bindGraphicsDescriptorSets(const CommandBuffer & cmdBuff, VkPipelineLayout layout,
                                     array_view<const VkDescriptorSet> descriptorSets) const;
+
+    void bindVertexBuffer(const CommandBuffer & cmdBuff, VkBuffer vb, std::uint32_t offset = 0) const;
+    void bindIndexBuffer(const CommandBuffer & cmdBuff, VkBuffer ib, VkIndexType type, std::uint32_t offset = 0) const;
 
     void drawUnindexed(const CommandBuffer & cmdBuff,
                        std::uint32_t vertexCount, std::uint32_t instanceCount,
@@ -593,6 +597,11 @@ inline Size2D VulkanContext::framebufferSize() const
     return m_swapChain.framebufferSize;
 }
 
+inline float VulkanContext::framebufferAspect() const
+{
+    return static_cast<float>(framebufferSize().width) / static_cast<float>(framebufferSize().height);
+}
+
 inline std::uint32_t VulkanContext::frameNumber() const
 {
     return m_frameNumber;
@@ -697,14 +706,29 @@ inline void VulkanContext::bindGraphicsDescriptorSets(const CommandBuffer & cmdB
                             static_cast<std::uint32_t>(descriptorSets.size()), descriptorSets.data(), 0, nullptr);
 }
 
+inline void VulkanContext::bindVertexBuffer(const CommandBuffer & cmdBuff, VkBuffer vb, const std::uint32_t offset) const
+{
+    assert(vb != VK_NULL_HANDLE);
+    assert(cmdBuff.isInRecordingState());
+    const VkBuffer vertexBuffers[] = { vb };
+    const VkDeviceSize offsets[]   = { offset };
+    vkCmdBindVertexBuffers(cmdBuff.commandBufferHandle(), 0, 1, vertexBuffers, offsets);
+}
+
+inline void VulkanContext::bindIndexBuffer(const CommandBuffer & cmdBuff, VkBuffer ib,
+                                           const VkIndexType type, const std::uint32_t offset) const
+{
+    assert(ib != VK_NULL_HANDLE);
+    assert(cmdBuff.isInRecordingState());
+    vkCmdBindIndexBuffer(cmdBuff.commandBufferHandle(), ib, offset, type);
+}
+
 inline void VulkanContext::drawUnindexed(const CommandBuffer & cmdBuff,
                                          std::uint32_t vertexCount, std::uint32_t instanceCount,
                                          std::uint32_t firstVertex, std::uint32_t firstInstance) const
 {
     assert(cmdBuff.isInRecordingState());
-    vkCmdDraw(cmdBuff.commandBufferHandle(),
-              vertexCount, instanceCount,
-              firstVertex, firstInstance);
+    vkCmdDraw(cmdBuff.commandBufferHandle(), vertexCount, instanceCount, firstVertex, firstInstance);
 }
 
 inline void VulkanContext::drawIndexed(const CommandBuffer & cmdBuff,
@@ -713,10 +737,8 @@ inline void VulkanContext::drawIndexed(const CommandBuffer & cmdBuff,
                                        std::uint32_t firstInstance) const
 {
     assert(cmdBuff.isInRecordingState());
-    vkCmdDrawIndexed(cmdBuff.commandBufferHandle(),
-                     indexCount, instanceCount,
-                     firstIndex, vertexOffset,
-                     firstInstance);
+    vkCmdDrawIndexed(cmdBuff.commandBufferHandle(), indexCount, instanceCount,
+                     firstIndex, vertexOffset, firstInstance);
 }
 
 inline void VulkanContext::waitGpuIdle() const

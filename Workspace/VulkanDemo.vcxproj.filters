@@ -79,6 +79,9 @@
     <ClCompile Include="..\Source\External\lib-cfg\cfg.cpp">
       <Filter>Source Files\External\Libs</Filter>
     </ClCompile>
+    <ClCompile Include="..\Source\VkToolbox\Mesh.cpp">
+      <Filter>Source Files\VkToolbox</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\Source\VkToolbox\Resource.hpp">
@@ -177,9 +180,18 @@
     <ClInclude Include="..\Source\VkToolbox\PipelineState.hpp">
       <Filter>Source Files\VkToolbox</Filter>
     </ClInclude>
+    <ClInclude Include="..\Source\VkToolbox\Mesh.hpp">
+      <Filter>Source Files\VkToolbox</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="..\Source\Shaders\BuiltInTriangleTest.glsl">
+      <Filter>Source Files\Shaders</Filter>
+    </None>
+    <None Include="..\Source\Shaders\VertexColorSimple.glsl">
+      <Filter>Source Files\Shaders</Filter>
+    </None>
+    <None Include="..\Source\Shaders\VSCommon.glsl">
       <Filter>Source Files\Shaders</Filter>
     </None>
   </ItemGroup>

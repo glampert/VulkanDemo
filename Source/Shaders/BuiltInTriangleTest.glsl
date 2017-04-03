@@ -1,20 +1,17 @@
-/*
- * Test shader that draws a built-in triangle.
- *
- * The vertices are hardcoded in the VS so you
- * don't need to set up a vertex buffer to draw
- * the triangle, just issuing a vkCmdDraw is enough
- * to get something on screen for quick testing.
- */
+//
+// Test shader that draws a built-in triangle.
+//
+// The vertices are hardcoded in the VS so you
+// don't need to set up a vertex buffer to draw
+// the triangle, just issuing a vkCmdDraw is enough
+// to get something on screen for quick testing.
+//
 
 // ----------------------------------------------------------------------------
 #glsl_vertex
 // ----------------------------------------------------------------------------
 
-out gl_PerVertex
-{
-    vec4 gl_Position;
-};
+#include <VSCommon.glsl>
 
 layout(location = 0) out vec3 outVertexColor;
 

@@ -110,6 +110,7 @@
     <ClCompile Include="..\Source\VkToolbox\Hashing.cpp" />
     <ClCompile Include="..\Source\VkToolbox\Image.cpp" />
     <ClCompile Include="..\Source\VkToolbox\Log.cpp" />
+    <ClCompile Include="..\Source\VkToolbox\Mesh.cpp" />
     <ClCompile Include="..\Source\VkToolbox\OSWindow.cpp" />
     <ClCompile Include="..\Source\VkToolbox\Resource.cpp" />
     <ClCompile Include="..\Source\VkToolbox\ResourceManager.cpp" />
@@ -140,6 +141,7 @@
     <ClInclude Include="..\Source\VkToolbox\Hashing.hpp" />
     <ClInclude Include="..\Source\VkToolbox\Image.hpp" />
     <ClInclude Include="..\Source\VkToolbox\Log.hpp" />
+    <ClInclude Include="..\Source\VkToolbox\Mesh.hpp" />
     <ClInclude Include="..\Source\VkToolbox\OSWindow.hpp" />
     <ClInclude Include="..\Source\VkToolbox\PipelineState.hpp" />
     <ClInclude Include="..\Source\VkToolbox\Pool.hpp" />
@@ -153,6 +155,8 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="..\Source\Shaders\BuiltInTriangleTest.glsl" />
+    <None Include="..\Source\Shaders\VSCommon.glsl" />
+    <None Include="..\Source\Shaders\VertexColorSimple.glsl" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

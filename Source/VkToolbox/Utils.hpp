@@ -9,6 +9,8 @@
 
 #include <cassert>
 #include <cstring>
+#include <cmath>
+
 #include <utility>
 #include <memory>
 #include <type_traits>
@@ -166,6 +168,44 @@ inline T * alignPtr(const T * ptr, const std::size_t alignment)
     T * userPtr = reinterpret_cast<T *>(alignedPtr);
     assert(isAlignedPtr(userPtr, alignment));
     return userPtr;
+}
+
+// Angle canonicalization for Degrees (180-360):
+inline float normalizeAngle360(float degrees)
+{
+    if (degrees >= 360.0f || degrees < 0.0f)
+    {
+        degrees -= std::floor(degrees * (1.0f / 360.0f)) * 360.0f;
+    }
+    return degrees;
+}
+inline float normalizeAngle180(float degrees)
+{
+    degrees = normalizeAngle360(degrees);
+    if (degrees > 180.0f)
+    {
+        degrees -= 360.0f;
+    }
+    return degrees;
+}
+
+// Angle canonicalization for Radians (PI-2PI):
+inline float normalizeAngleTwoPI(float radians)
+{
+    if (radians >= TwoPI || radians < 0.0f)
+    {
+        radians -= std::floor(radians * (1.0f / TwoPI)) * TwoPI;
+    }
+    return radians;
+}
+inline float normalizeAnglePI(float radians)
+{
+    radians = normalizeAngleTwoPI(radians);
+    if (radians > PI)
+    {
+        radians -= TwoPI;
+    }
+    return radians;
 }
 
 // Test of a C string is a prefix of another. Strings must not be null!

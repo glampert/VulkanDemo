@@ -13,7 +13,13 @@
 namespace VkToolbox
 {
 
+// ========================================================
+
+// Base path for GLSL shader files.
 #define VKTB_SHADER_SOURCE_PATH "Source/Shaders/"
+
+// If non-zero, failing to compile a shader will abort with a fatal error.
+#define VKTB_GLSL_COMPILER_ERRORS_ARE_FATAL 1
 
 // ========================================================
 // struct GlslShaderStage:

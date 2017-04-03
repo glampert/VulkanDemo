@@ -231,6 +231,12 @@ public:
 }; // MyGlslIncluder
 }  // namespace
 
+#if VKTB_GLSL_COMPILER_ERRORS_ARE_FATAL
+    #define GLSL_COMPILER_ERROR_OUT() Log::fatalF("Aborting due to failed shader compilation - see log for details.")
+#else // !VKTB_GLSL_COMPILER_ERRORS_ARE_FATAL
+    #define GLSL_COMPILER_ERROR_OUT() return false
+#endif // VKTB_GLSL_COMPILER_ERRORS_ARE_FATAL
+
 static bool GlslToSPIRV(const VkShaderStageFlagBits shaderType,
                         const char * const shaderDebugName,
                         const array_view<const char *> glslSourceStrings,
@@ -274,7 +280,7 @@ static bool GlslToSPIRV(const VkShaderStageFlagBits shaderType,
         Log::errorF("%s", str512(shader.getInfoLog()).trim().c_str());
         Log::errorF("%s", str512(shader.getInfoDebugLog()).trim().c_str());
         Log::errorF("---------------------------------------------------");
-        return false;
+        GLSL_COMPILER_ERROR_OUT();
     }
     GlslPrintWarnings(shader, "shader", shaderDebugName);
 
@@ -286,7 +292,7 @@ static bool GlslToSPIRV(const VkShaderStageFlagBits shaderType,
         Log::errorF("%s", str512(program.getInfoLog()).trim().c_str());
         Log::errorF("%s", str512(program.getInfoDebugLog()).trim().c_str());
         Log::errorF("---------------------------------------------------");
-        return false;
+        GLSL_COMPILER_ERROR_OUT();
     }
     GlslPrintWarnings(program, "program", shaderDebugName);
 
@@ -320,6 +326,8 @@ static bool GlslToSPIRV(const VkShaderStageFlagBits shaderType,
 
     return true;
 }
+
+#undef GLSL_COMPILER_ERROR_OUT
 
 // ========================================================
 // GlslShaderStage enum lists:
@@ -691,6 +699,7 @@ void GlslShader::initClass()
     GlslShaderPreproc::setExtension("GL_ARB_separate_shader_objects",  "enable");
     GlslShaderPreproc::setExtension("GL_ARB_shading_language_420pack", "enable");
     GlslShaderPreproc::setExtension("GL_GOOGLE_include_directive",     "enable");
+    GlslShaderPreproc::setShaderIncludePath(VKTB_SHADER_SOURCE_PATH);
 }
 
 void GlslShader::shutdownClass()
@@ -823,6 +832,8 @@ void setExtension(const char * extName, const char * state)
     str128 ext;
     ext.setf("#extension %s : %s", extName, state);
     s_glslExtensions.emplace_back(std::move(ext));
+
+    s_allDefinesStrUpToDate = false;
 }
 
 void setVersion(const int version, const bool core, const bool fwdCompat)
@@ -830,12 +841,16 @@ void setVersion(const int version, const bool core, const bool fwdCompat)
     s_glslVersionUsed   = version;
     s_glslFwdCompatible = fwdCompat;
     s_glslProfileUsed   = (core ? ECoreProfile : ECompatibilityProfile);
+
+    s_allDefinesStrUpToDate = false;
 }
 
 void setOptimizations(const bool optimize, const bool debug)
 {
     s_pragmaOptimize = optimize;
     s_pragmaDebug    = debug;
+
+    s_allDefinesStrUpToDate = false;
 }
 
 const Define * findDefineByName(const char * const name)
