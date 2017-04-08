@@ -49,13 +49,14 @@ struct MeshVertex
     static const std::array<VkVertexInputAttributeDescription, 6> & attributeDescriptions();
 };
 
+constexpr int BoxFaces    = 6;
 constexpr int BoxVertexes = 24;
 constexpr int BoxIndexes  = 36;
 
 void createBoxMesh(const float   width,
                    const float   height,
                    const float   depth,
-                   const Color32 inFaceColors[6],
+                   const Color32 inFaceColors[BoxFaces],
                    MeshVertex    outVertexes[BoxVertexes],
                    std::uint16_t outIndexes[BoxIndexes]);
 

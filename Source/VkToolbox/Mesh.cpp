@@ -65,10 +65,12 @@ const std::array<VkVertexInputAttributeDescription, 6> & MeshVertex::attributeDe
     return s_attributeDescriptions;
 }
 
+// ========================================================
+
 void createBoxMesh(const float   width,
                    const float   height,
                    const float   depth,
-                   const Color32 inFaceColors[6],
+                   const Color32 inFaceColors[BoxFaces],
                    MeshVertex    outVertexes[BoxVertexes],
                    std::uint16_t outIndexes[BoxIndexes])
 {
@@ -152,5 +154,7 @@ void createBoxMesh(const float   width,
         facePtr += 3;
     }
 }
+
+// ========================================================
 
 } // namespace VkToolbox

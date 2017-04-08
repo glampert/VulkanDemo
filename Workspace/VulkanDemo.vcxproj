@@ -102,6 +102,7 @@
     <ClCompile Include="..\Source\Apps\ColoredCube\VkAppColoredCube.cpp" />
     <ClCompile Include="..\Source\Apps\HelloTriangle\VkAppHelloTriangle.cpp" />
     <ClCompile Include="..\Source\Apps\Main.cpp" />
+    <ClCompile Include="..\Source\Apps\TexturedCubes\VkAppTexturedCubes.cpp" />
     <ClCompile Include="..\Source\Apps\VulkanDemoApp.cpp" />
     <ClCompile Include="..\Source\External\External.cpp" />
     <ClCompile Include="..\Source\External\lib-cfg\cfg.cpp" />
@@ -155,6 +156,7 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="..\Source\Shaders\BuiltInTriangleTest.glsl" />
+    <None Include="..\Source\Shaders\TexturedSimple.glsl" />
     <None Include="..\Source\Shaders\VSCommon.glsl" />
     <None Include="..\Source\Shaders\VertexColorSimple.glsl" />
   </ItemGroup>

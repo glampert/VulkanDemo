@@ -13,6 +13,8 @@
 namespace VkToolbox
 {
 
+#define VKTB_TEXTURES_PATH "Assets/Textures/"
+
 class Image;
 class CommandBuffer;
 
@@ -45,6 +47,8 @@ public:
 
     VkSampler samplerHandle() const { return m_samplerHandle; }
     operator VkSampler() const { return m_samplerHandle; }
+
+    static const VkSamplerCreateInfo & defaults();
 
 private:
 
@@ -95,6 +99,9 @@ public:
 
     void setGenerateMipmapsOnLoad(bool trueIfShouldGenMipmaps);
     bool generateMipmapsOnLoad() const;
+
+    // Load the texture from already in-memory Image instance.
+    bool loadFromImageInMemory(const Image & image);
 
     // This can be safely called after the texture staging buffer of
     // the context has been submitted and waited for completion.
