@@ -58,9 +58,11 @@ layout(location = 0) out vec4 outFragColor;
 
 void main()
 {
+    outFragColor = texture(textureSampler, inVertexTexCoords) * inVertexColor;
     //outFragColor = inVertexColor;
     //outFragColor = vec4(inVertexTexCoords, 0.0, 1.0);
     //outFragColor = vec4(inVertexNormal, 1.0);
+    //outFragColor = vec4(inVertexTangent, 1.0);
     //outFragColor = vec4(inVertexBitangent, 1.0);
 }
 
