@@ -56,7 +56,7 @@ private:
     Matrices                                m_matrices;
     StructuredShaderUniformBuffer<Matrices> m_uniformBuffer;
     StructuredVertexBuffer<MeshVertex>      m_vertexBuffer;
-    StructuredIndexBuffer<std::uint16_t>    m_indexBuffer;
+    StructuredIndexBuffer<MeshIndex>        m_indexBuffer;
 
 private:
 
@@ -183,7 +183,7 @@ void VkAppColoredCube::initPipeline()
 void VkAppColoredCube::initVertexBuffer()
 {
     MeshVertex verts[BoxVertexes];
-    std::uint16_t indexes[BoxIndexes];
+    MeshIndex indexes[BoxIndexes];
 
     const Color32 faceColors[6] = {
         { 255, 255, 255 },

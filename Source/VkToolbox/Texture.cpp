@@ -418,6 +418,7 @@ void Texture::initClass()
 {
     Log::debugF("---- Texture::initClass ----");
 
+    // Vulkan works best with these settings.
     Image::sm_loadOptions.forceRGBA = true;
     Image::sm_loadOptions.roundUpToPowerOfTwo = true;
 }

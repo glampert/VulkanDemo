@@ -29,6 +29,9 @@
     <Filter Include="Source Files\Apps\TexturedCubes">
       <UniqueIdentifier>{4f5c9e39-133e-4fab-abcb-a294d9b64d07}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Source Files\Apps\TeapotModel">
+      <UniqueIdentifier>{c3b7c5d7-b6fb-4773-b490-dea2bf200117}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\Source\VkToolbox\Resource.cpp">
@@ -87,6 +90,9 @@
     </ClCompile>
     <ClCompile Include="..\Source\Apps\TexturedCubes\VkAppTexturedCubes.cpp">
       <Filter>Source Files\Apps\TexturedCubes</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Source\Apps\TeapotModel\VkAppTeapotModel.cpp">
+      <Filter>Source Files\Apps\TeapotModel</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -200,7 +206,10 @@
     <None Include="..\Source\Shaders\VSCommon.glsl">
       <Filter>Source Files\Shaders</Filter>
     </None>
-    <None Include="..\Source\Shaders\TexturedSimple.glsl">
+    <None Include="..\Source\Shaders\Teapot.glsl">
+      <Filter>Source Files\Shaders</Filter>
+    </None>
+    <None Include="..\Source\Shaders\TexturedCubes.glsl">
       <Filter>Source Files\Shaders</Filter>
     </None>
   </ItemGroup>

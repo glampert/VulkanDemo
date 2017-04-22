@@ -60,17 +60,6 @@ VulkanContext::VulkanContext(const OSWindow & window, const Size2D fbSize, const
 
     m_swapChain.framebufferSize = fbSize;
 
-    for (std::size_t i = 0; i < m_clearValues.size(); ++i)
-    {
-        m_clearValues[i].color.float32[0] = 0.0f;
-        m_clearValues[i].color.float32[1] = 0.0f;
-        m_clearValues[i].color.float32[2] = 0.0f;
-        m_clearValues[i].color.float32[3] = 1.0f;
-
-        m_clearValues[i].depthStencil.depth   = 0.0f;
-        m_clearValues[i].depthStencil.stencil = 0;
-    }
-
     initInstanceLayerProperties();
     initInstance();
     initEnumerateGpus();

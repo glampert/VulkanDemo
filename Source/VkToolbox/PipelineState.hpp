@@ -220,8 +220,8 @@ inline void PipelineStateBuilder::defaults()
     rasterizerState.depthClampEnable = VK_FALSE;
     rasterizerState.rasterizerDiscardEnable = VK_FALSE;
     rasterizerState.polygonMode = VK_POLYGON_MODE_FILL;
-    rasterizerState.cullMode = VK_CULL_MODE_BACK_BIT;
-    rasterizerState.frontFace = VK_FRONT_FACE_CLOCKWISE;
+    rasterizerState.cullMode = VK_CULL_MODE_BACK_BIT; // Backface culling
+    rasterizerState.frontFace = VK_FRONT_FACE_CLOCKWISE; // CW
     rasterizerState.depthBiasEnable = VK_FALSE;
     rasterizerState.depthBiasConstantFactor = 0.0f;
     rasterizerState.depthBiasClamp = 0.0f;
@@ -253,9 +253,9 @@ inline void PipelineStateBuilder::defaults()
     depthStencilState.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
     depthStencilState.pNext = nullptr;
     depthStencilState.flags = 0;
-    depthStencilState.depthTestEnable = VK_FALSE;
-    depthStencilState.depthWriteEnable = VK_FALSE;
-    depthStencilState.depthCompareOp = VK_COMPARE_OP_NEVER;
+    depthStencilState.depthTestEnable = VK_TRUE;
+    depthStencilState.depthWriteEnable = VK_TRUE;
+    depthStencilState.depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL; // RH GL-style projection, depth-clear=1
     depthStencilState.depthBoundsTestEnable = VK_FALSE;
     depthStencilState.stencilTestEnable = VK_FALSE;
     depthStencilState.front = {};

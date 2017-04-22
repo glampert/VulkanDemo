@@ -8,10 +8,16 @@
 // ================================================================================================
 
 #include "VulkanContext.hpp"
-#include <cstddef> // For offsetof()
+
+#include <cstdint>
+#include <vector>
 
 namespace VkToolbox
 {
+
+// 32 bits indexing to support large meshes.
+using MeshIndex = std::uint32_t;
+constexpr VkIndexType MeshVkIndexType = VK_INDEX_TYPE_UINT32;
 
 struct Float2
 {
@@ -28,7 +34,7 @@ struct Float4
     float x, y, z, w;
 };
 
-struct MeshVertex
+struct MeshVertex final
 {
     Float3 position;
     Float2 texcoords;
@@ -49,6 +55,45 @@ struct MeshVertex
     static const std::array<VkVertexInputAttributeDescription, 6> & attributeDescriptions();
 };
 
+struct MeshSubSection final
+{
+    int vertexStart;
+    int vertexCount;
+    int indexStart;
+    int indexCount;
+    int materialIndex;
+};
+
+struct MeshMaterial final
+{
+    static constexpr int InvalidIndex = -1;
+
+    //TODO
+};
+
+struct Mesh final
+{
+    std::vector<MeshVertex>     vertexes;
+    std::vector<MeshIndex>      indexes;
+    std::vector<MeshSubSection> submeshes;
+    std::vector<MeshMaterial>   materials;
+
+    int vertexCount()   const { return static_cast<int>(vertexes.size());  }
+    int indexCount()    const { return static_cast<int>(indexes.size());   }
+    int submeshCount()  const { return static_cast<int>(submeshes.size()); }
+    int materialCount() const { return static_cast<int>(materials.size()); }
+
+    Mesh() = default;
+    Mesh(const Mesh & other) = delete;
+    Mesh & operator = (const Mesh & other) = delete;
+
+    bool initFromFile(const char * filePath, float vertexScaling = 1.0f);
+    bool isInitialized() const;
+    void shutdown();
+};
+
+// ========================================================
+
 constexpr int BoxFaces    = 6;
 constexpr int BoxVertexes = 24;
 constexpr int BoxIndexes  = 36;
@@ -58,6 +103,8 @@ void createBoxMesh(const float   width,
                    const float   depth,
                    const Color32 inFaceColors[BoxFaces],
                    MeshVertex    outVertexes[BoxVertexes],
-                   std::uint16_t outIndexes[BoxIndexes]);
+                   MeshIndex     outIndexes[BoxIndexes]);
+
+// ========================================================
 
 } // namespace VkToolbox

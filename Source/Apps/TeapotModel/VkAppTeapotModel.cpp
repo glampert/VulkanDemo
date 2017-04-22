@@ -1,26 +1,26 @@
 
 // ================================================================================================
-// File: Apps/TexturedCubes/VkAppTexturedCubes.cpp
+// File: Apps/TeapotModel/VkAppTeapotModel.cpp
 // Author: Guilherme R. Lampert
-// Created on: 08/04/17
-// Brief: Draws two textured cubes. One texture is loaded from file, the other is generated.
+// Created on: 09/04/17
+// Brief: Draws a teapot model that was loaded from file.
 // ================================================================================================
 
 #include "Apps/VulkanDemoApp.hpp"
 #include "VkToolbox/DescriptorSets.hpp"
 #include "VkToolbox/PipelineState.hpp"
 #include "VkToolbox/GlslShader.hpp"
-#include "VkToolbox/Texture.hpp"
 #include "VkToolbox/Buffers.hpp"
+#include "VkToolbox/Texture.hpp"
 #include "VkToolbox/Mesh.hpp"
 
 using namespace VkToolbox;
 
 // ========================================================
-// class VkAppTexturedCubes:
+// class VkAppTeapotModel:
 // ========================================================
 
-class VkAppTexturedCubes final
+class VkAppTeapotModel final
     : public VulkanDemoApp
 {
 private:
@@ -38,7 +38,7 @@ private:
     int                      m_nextCmdBufferIndex    = 0;
 
     // Shading pipeline state:
-    const char *             m_shaderFilename = VKTB_SHADER_SOURCE_PATH "TexturedCubes.glsl";
+    const char *             m_shaderFilename = VKTB_SHADER_SOURCE_PATH "Teapot.glsl";
     GlslShader               m_shaderProgram;
     DescriptorSetPool        m_descriptorSetPool;
     DescriptorSetLayout      m_descriptorSetLayout;
@@ -54,41 +54,40 @@ private:
         Matrix4 mvp          = Matrix4::identity();
     };
 
-    std::array<Matrices, 2>                 m_matrices;
+    Matrices                                m_matrices;
     StructuredShaderUniformBuffer<Matrices> m_uniformBuffer;
     StructuredVertexBuffer<MeshVertex>      m_vertexBuffer;
     StructuredIndexBuffer<MeshIndex>        m_indexBuffer;
 
-    // Textures:
-    const char * m_texture0Name = VKTB_TEXTURES_PATH "Common/lenna.png";
-    const char * m_texture1Name = VKTB_TEXTURES_PATH "Generated/checkers.png";
-    Texture      m_texture0;
-    Texture      m_texture1;
-    Sampler      m_sharedSampler;
+    // Texture/sampler/mesh:
+    const char * m_textureName = VKTB_TEXTURES_PATH "Common/default.png";
+    Texture      m_texture;
+    Sampler      m_sampler;
+    Mesh         m_mesh;
 
 private:
 
     void initDescriptorSets();
     void initPipeline();
+    void initTexture();
     void initVertexBuffer();
-    void initTextures();
 
     void updateBuffers(CommandBuffer & cmdBuff);
     void prepareCommandBuffer(CommandBuffer & cmdBuff);
 
 public:
 
-    VkAppTexturedCubes(const StartupOptions & options);
+    VkAppTeapotModel(const StartupOptions & options);
     void onFrameUpdate() override;
 };
 
 // ========================================================
 
-VULKAN_DEMO_REGISTER_APP(VkAppTexturedCubes);
+VULKAN_DEMO_REGISTER_APP(VkAppTeapotModel);
 
 // ========================================================
 
-VkAppTexturedCubes::VkAppTexturedCubes(const StartupOptions & options)
+VkAppTeapotModel::VkAppTeapotModel(const StartupOptions & options)
     : VulkanDemoApp{ options }
     , m_cmdPool{ context() }
     , m_shaderProgram{ context(), strReg().access(m_shaderFilename) }
@@ -99,16 +98,11 @@ VkAppTexturedCubes::VkAppTexturedCubes(const StartupOptions & options)
     , m_uniformBuffer{ context() }
     , m_vertexBuffer{ context() }
     , m_indexBuffer{ context() }
-    , m_texture0{ context(), strReg().access(m_texture0Name) }
-    , m_texture1{ context(), strReg().access(m_texture1Name) }
-    , m_sharedSampler{ context() }
+    , m_texture{ context(), strReg().access(m_textureName) }
+    , m_sampler{ context() }
 {
     m_shaderProgram.load();
-
-    m_uniformBuffer.initialize(2);          // One matrix uniform buffer for each cube we are going to draw
-    m_vertexBuffer.initialize(BoxVertexes); // Number of unique vertexes in the object
-    m_indexBuffer.initialize(BoxIndexes);   // Number of indexes mapping the shared verts
-
+    m_uniformBuffer.initialize(1);
     m_cmdPool.initialize(VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT, context().graphisQueue().familyIndex);
 
     for (std::size_t i = 0; i < m_cmdBuffers.size(); ++i)
@@ -123,31 +117,31 @@ VkAppTexturedCubes::VkAppTexturedCubes(const StartupOptions & options)
     }
     m_currentCmdBufferFence = m_cmdBufferFences[0].get();
 
-    initTextures();
+    initTexture();
     initDescriptorSets();
     initPipeline();
     initVertexBuffer();
 
-    context().setDefaultClearColor({ 0.7f, 0.7f, 0.7f, 1.0f });
+    context().setDefaultClearColor({ 0.4f, 0.4f, 0.4f, 1.0f });
 }
 
-void VkAppTexturedCubes::initDescriptorSets()
+void VkAppTeapotModel::initDescriptorSets()
 {
     // Pool:
     const VkDescriptorPoolSize descriptorPoolSizes[] = {
-        { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,         2 }, // matrices[2]
-        { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 2 }, // textureSampler[2]
+        { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,         1 }, // uniform matrices
+        { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1 }, // uniform textureSampler
     };
     m_descriptorSetPool.initialize(1, make_array_view(descriptorPoolSizes));
 
     // Set layout:
     VkDescriptorSetLayoutBinding uboLayoutBindings[2] = {};
     uboLayoutBindings[0].binding         = 0; // layout(binding = 0)
-    uboLayoutBindings[0].descriptorCount = 2; // Matching 'matrices[2]' declaration in the VS
+    uboLayoutBindings[0].descriptorCount = 1; // Matching 'matrices' declaration in the VS
     uboLayoutBindings[0].descriptorType  = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     uboLayoutBindings[0].stageFlags      = VK_SHADER_STAGE_VERTEX_BIT;
     uboLayoutBindings[1].binding         = 1; // layout(binding = 1)
-    uboLayoutBindings[1].descriptorCount = 2; // Matching 'textureSampler[2]' declaration in the FS
+    uboLayoutBindings[1].descriptorCount = 1; // Matching 'textureSampler' declaration in the FS
     uboLayoutBindings[1].descriptorType  = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
     uboLayoutBindings[1].stageFlags      = VK_SHADER_STAGE_FRAGMENT_BIT;
     m_descriptorSetLayout.initialize(make_array_view(uboLayoutBindings));
@@ -157,41 +151,35 @@ void VkAppTexturedCubes::initDescriptorSets()
     m_descriptorSet.initialize(&m_descriptorSetPool);
     m_descriptorSet.allocate(make_array_view(layouts));
 
-    VkDescriptorBufferInfo bufferInfos[2] = {};
-    bufferInfos[0].buffer = m_uniformBuffer.bufferHandle();
-    bufferInfos[0].range  = m_uniformBuffer.elementSizeBytes();
-    bufferInfos[0].offset = 0;
-    bufferInfos[1].buffer = m_uniformBuffer.bufferHandle();
-    bufferInfos[1].range  = m_uniformBuffer.elementSizeBytes();
-    bufferInfos[1].offset = m_uniformBuffer.elementSizeBytes();
+    VkDescriptorBufferInfo bufferInfo;
+    bufferInfo.buffer = m_uniformBuffer.bufferHandle();
+    bufferInfo.range  = m_uniformBuffer.elementSizeBytes();
+    bufferInfo.offset = 0;
 
-    VkDescriptorImageInfo imageInfos[2] = {};
-    imageInfos[0].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-    imageInfos[0].imageView   = m_texture0.imageViewHandle();
-    imageInfos[0].sampler     = m_sharedSampler;
-    imageInfos[1].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-    imageInfos[1].imageView   = m_texture1.imageViewHandle();
-    imageInfos[1].sampler     = m_sharedSampler;
+    VkDescriptorImageInfo imageInfo;
+    imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    imageInfo.imageView   = m_texture.imageViewHandle();
+    imageInfo.sampler     = m_sampler;
 
     VkWriteDescriptorSet descriptorWrites[2] = {};
     descriptorWrites[0].sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
     descriptorWrites[0].dstSet          = m_descriptorSet.descriptorSetHandles[0];
     descriptorWrites[0].dstBinding      = 0;
     descriptorWrites[0].dstArrayElement = 0;
-    descriptorWrites[0].descriptorCount = 2;
+    descriptorWrites[0].descriptorCount = 1;
     descriptorWrites[0].descriptorType  = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    descriptorWrites[0].pBufferInfo     = bufferInfos;
+    descriptorWrites[0].pBufferInfo     = &bufferInfo;
     descriptorWrites[1].sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
     descriptorWrites[1].dstSet          = m_descriptorSet.descriptorSetHandles[0];
     descriptorWrites[1].dstBinding      = 1;
     descriptorWrites[1].dstArrayElement = 0;
-    descriptorWrites[1].descriptorCount = 2;
+    descriptorWrites[1].descriptorCount = 1;
     descriptorWrites[1].descriptorType  = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    descriptorWrites[1].pImageInfo      = imageInfos;
+    descriptorWrites[1].pImageInfo      = &imageInfo;
     m_descriptorSet.update(make_array_view(descriptorWrites));
 }
 
-void VkAppTexturedCubes::initPipeline()
+void VkAppTeapotModel::initPipeline()
 {
     const VkDescriptorSetLayout setLayouts[] = { m_descriptorSetLayout.descriptorSetLayoutHandle() };
     m_pipelineStateLayout.initialize(make_array_view(setLayouts));
@@ -219,54 +207,49 @@ void VkAppTexturedCubes::initPipeline()
     m_pipelineState.initialize(psoBuilder);
 }
 
-void VkAppTexturedCubes::initVertexBuffer()
+void VkAppTeapotModel::initTexture()
 {
-    MeshVertex verts[BoxVertexes];
-    MeshIndex indexes[BoxIndexes];
-
-    const Color32 faceColors[6] = {
-        { 255, 255, 255 },
-        {   0,   0, 255 },
-        {   0, 255,   0 },
-        { 255,   0,   0 },
-        { 255, 255,   0 },
-        {   0, 255, 255 },
-    };
-    createBoxMesh(1.0f, 1.0f, 1.0f, faceColors, verts, indexes);
-
-    m_vertexBuffer.writeN(verts);
-    m_indexBuffer.writeN(indexes);
-}
-
-void VkAppTexturedCubes::initTextures()
-{
-    m_sharedSampler.initialize(Sampler::defaults());
+    m_sampler.initialize(Sampler::defaults());
 
     const auto & cmdBuff = context().mainTextureStagingCmdBuffer();
     cmdBuff.beginRecording();
     {
-        // Not using mipmaps this time.
-        m_texture0.setGenerateMipmapsOnLoad(false);
-        m_texture1.setGenerateMipmapsOnLoad(false);
-
-        // Texture loaded form file:
-        m_texture0.load();
-
-        // Generated texture:
-        Image image;
-        image.initWithCheckerPattern({ 64, 64 }, 4);
-        m_texture1.loadFromImageInMemory(image);
+        m_texture.setGenerateMipmapsOnLoad(false); // Not using mipmaps this time.
+        m_texture.load();
     }
     cmdBuff.endRecording();
     cmdBuff.submitAndWaitComplete(context().graphisQueue());
     cmdBuff.reset();
 
     // Done with the staging data.
-    m_texture0.releaseStagingImage();
-    m_texture1.releaseStagingImage();
+    m_texture.releaseStagingImage();
 }
 
-void VkAppTexturedCubes::updateBuffers(CommandBuffer & cmdBuff)
+void VkAppTeapotModel::initVertexBuffer()
+{
+    #define MESH_FILE_AND_SCALE "Assets/Models/Teapot/teapot.obj",0.1f
+    //#define MESH_FILE_AND_SCALE "Assets/Models/Cube/cube.obj",5.0f
+
+    m_mesh.initFromFile(MESH_FILE_AND_SCALE);
+
+    m_vertexBuffer.initialize(m_mesh.vertexCount());
+    m_indexBuffer.initialize(m_mesh.indexCount());
+
+    m_vertexBuffer.writeN(make_array_view(m_mesh.vertexes));
+    m_indexBuffer.writeN(make_array_view(m_mesh.indexes));
+
+    // Validate the index buffer:
+    assert(m_vertexBuffer.elementCount() == m_mesh.vertexCount());
+    assert(m_indexBuffer.elementCount()  == m_mesh.indexCount());
+    for (MeshIndex idx : m_mesh.indexes)
+    {
+        assert(idx < MeshIndex(m_mesh.vertexCount()));
+    }
+
+    #undef MESH_FILE_AND_SCALE
+}
+
+void VkAppTeapotModel::updateBuffers(CommandBuffer & cmdBuff)
 {
     // Since the geometry never changes, we don't need to issue
     // a GPU copy command more than once!
@@ -283,25 +266,18 @@ void VkAppTexturedCubes::updateBuffers(CommandBuffer & cmdBuff)
     // Uniform buffer per-frame update:
     //
     const float time      = timeSeconds();
-    const float rotationX = normalizeAngle180(time * 60.0f);
-    const float rotationY = normalizeAngle180(time * 30.0f);
+    const float rotationY = normalizeAngle180(time * 10.0f);
 
-    m_matrices[0].model      = Matrix4::translation(Vector3{ -1.0f, 0.0f, -3.0f }) * Matrix4::rotationZYX(Vector3{ 0.0f, rotationY * DegToRad, rotationX * DegToRad });
-    m_matrices[0].view       = Matrix4::lookAt(Point3{ 0.0f, 0.0f, 2.0f }, Point3{ 0.0f, 0.0f, 0.0f }, Vector3{ 0.0f, 1.0f, 0.0f });
-    m_matrices[0].projection = Matrix4::perspective(45.0f * DegToRad, context().framebufferAspect(), 0.1f, 100.0f);
-    m_matrices[0].mvp        = m_matrices[0].projection * m_matrices[0].view * m_matrices[0].model;
-    m_uniformBuffer.write(m_matrices[0], 0);
+    m_matrices.model      = Matrix4::translation(Vector3{ 0.0f, -3.0f, -20.0f }) * Matrix4::rotationY(rotationY * DegToRad);
+    m_matrices.view       = Matrix4::lookAt(Point3{ 0.0f, 0.0f, 2.0f }, Point3{ 0.0f, 0.0f, -1.0f }, Vector3{ 0.0f, -1.0f, 0.0f });
+    m_matrices.projection = Matrix4::perspective(45.0f * DegToRad, context().framebufferAspect(), 0.1f, 100.0f);
+    m_matrices.mvp        = m_matrices.projection * m_matrices.view * m_matrices.model;
 
-    m_matrices[1].model      = Matrix4::translation(Vector3{ 1.0f, 0.0f, -3.0f }) * Matrix4::rotationZYX(Vector3{ 0.0f, rotationY * DegToRad, rotationX * DegToRad });
-    m_matrices[1].view       = Matrix4::lookAt(Point3{ 0.0f, 0.0f, 2.0f }, Point3{ 0.0f, 0.0f, 0.0f }, Vector3{ 0.0f, 1.0f, 0.0f });
-    m_matrices[1].projection = Matrix4::perspective(45.0f * DegToRad, context().framebufferAspect(), 0.1f, 100.0f);
-    m_matrices[1].mvp        = m_matrices[1].projection * m_matrices[1].view * m_matrices[1].model;
-    m_uniformBuffer.write(m_matrices[1], 1);
-
+    m_uniformBuffer.write(m_matrices);
     m_uniformBuffer.uploadStagingToGpu(cmdBuff);
 }
 
-void VkAppTexturedCubes::prepareCommandBuffer(CommandBuffer & cmdBuff)
+void VkAppTeapotModel::prepareCommandBuffer(CommandBuffer & cmdBuff)
 {
     cmdBuff.beginRecording();
 
@@ -317,14 +293,14 @@ void VkAppTexturedCubes::prepareCommandBuffer(CommandBuffer & cmdBuff)
     context().bindVertexBuffer(cmdBuff, m_vertexBuffer);
     context().bindIndexBuffer(cmdBuff, m_indexBuffer, vkIndexTypeForBuffer(m_indexBuffer));
 
-    context().drawIndexed(cmdBuff, m_indexBuffer.elementCount(), 2, 0, 0, 0);
+    context().drawIndexed(cmdBuff, m_indexBuffer.elementCount(), 1, 0, 0, 0);
 
     context().endRenderPass(cmdBuff);
 
     cmdBuff.endRecording();
 }
 
-void VkAppTexturedCubes::onFrameUpdate()
+void VkAppTeapotModel::onFrameUpdate()
 {
     context().beginFrame();
 

@@ -110,8 +110,8 @@ public:
     void bindGraphicsDescriptorSets(const CommandBuffer & cmdBuff, VkPipelineLayout layout,
                                     array_view<const VkDescriptorSet> descriptorSets) const;
 
-    void bindVertexBuffer(const CommandBuffer & cmdBuff, VkBuffer vb, std::uint32_t offset = 0) const;
-    void bindIndexBuffer(const CommandBuffer & cmdBuff, VkBuffer ib, VkIndexType type, std::uint32_t offset = 0) const;
+    void bindVertexBuffer(const CommandBuffer & cmdBuff, VkBuffer vb, std::uint32_t offsetInBytes = 0) const;
+    void bindIndexBuffer(const CommandBuffer & cmdBuff, VkBuffer ib, VkIndexType type, std::uint32_t offsetInBytes = 0) const;
 
     void drawUnindexed(const CommandBuffer & cmdBuff,
                        std::uint32_t vertexCount, std::uint32_t instanceCount,
@@ -126,8 +126,12 @@ public:
     void waitGpuIdle() const;
 
     // Default screen framebuffer clear-color and depth/stencil values.
-    void setDefaultClearValue(const VkClearValue & value);
-    const VkClearValue & defaultClearValue() const;
+    void setDefaultClearColor(const Vector4 & color);
+    const Vector4 & defaultClearColor() const;
+    void setDefaultClearDepth(float d);
+    float defaultClearDepth() const;
+    void setDefaultClearStencil(std::uint32_t s);
+    std::uint32_t defaultClearStencil() const;
 
     //
     // GPU queues info:
@@ -261,7 +265,9 @@ private:
 
     // Main/default render pass and shareable fence cache.
     RenderPass m_mainRenderPass;
-    std::array<VkClearValue, 3> m_clearValues;
+    Vector4 m_colorClearValue = { 0.0f, 0.0f, 0.0f, 1.0f };
+    float m_depthClearValue = 1.0f; // RH, GL-style, depthCompareOp=VK_COMPARE_OP_LESS_OR_EQUAL
+    std::uint32_t m_stencilClearValue = 0;
     std::unique_ptr<FenceCache> m_mainFenceCache;
 
     // Command buffers used exclusively for texture uploads (staging resources).
@@ -652,22 +658,47 @@ inline const VulkanContext::GpuQueue & VulkanContext::graphisQueue() const
     return m_gpuGraphicsQueue;
 }
 
-inline void VulkanContext::setDefaultClearValue(const VkClearValue & value)
+inline void VulkanContext::setDefaultClearColor(const Vector4 & color)
 {
-    for (std::size_t i = 0; i < m_clearValues.size(); ++i)
-    {
-        m_clearValues[i] = value;
-    }
+    m_colorClearValue = color;
 }
 
-inline const VkClearValue & VulkanContext::defaultClearValue() const
+inline const Vector4 & VulkanContext::defaultClearColor() const
 {
-    return m_clearValues[0];
+    return m_colorClearValue;
+}
+
+inline void VulkanContext::setDefaultClearDepth(const float d)
+{
+    m_depthClearValue = d;
+}
+
+inline float VulkanContext::defaultClearDepth() const
+{
+    return m_depthClearValue;
+}
+
+inline void VulkanContext::setDefaultClearStencil(const std::uint32_t s)
+{
+    m_stencilClearValue = s;
+}
+
+inline std::uint32_t VulkanContext::defaultClearStencil() const
+{
+    return m_stencilClearValue;
 }
 
 inline void VulkanContext::beginRenderPass(const CommandBuffer & cmdBuff) const
 {
     assert(cmdBuff.isInRecordingState());
+
+    VkClearValue clearValues[2] = {}; // color+depth
+    clearValues[0].color.float32[0]     = m_colorClearValue[0];
+    clearValues[0].color.float32[1]     = m_colorClearValue[1];
+    clearValues[0].color.float32[2]     = m_colorClearValue[2];
+    clearValues[0].color.float32[3]     = m_colorClearValue[3];
+    clearValues[1].depthStencil.depth   = m_depthClearValue;
+    clearValues[1].depthStencil.stencil = m_stencilClearValue;
 
     VkRenderPassBeginInfo renderPassInfo;
     renderPassInfo.sType                    = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
@@ -678,8 +709,8 @@ inline void VulkanContext::beginRenderPass(const CommandBuffer & cmdBuff) const
     renderPassInfo.renderArea.offset.y      = 0;
     renderPassInfo.renderArea.extent.width  = framebufferSize().width;
     renderPassInfo.renderArea.extent.height = framebufferSize().height;
-    renderPassInfo.clearValueCount          = swapChainBufferCount();
-    renderPassInfo.pClearValues             = m_clearValues.data();
+    renderPassInfo.clearValueCount          = 2; // Number of attachments in the pass
+    renderPassInfo.pClearValues             = clearValues;
 
     vkCmdBeginRenderPass(cmdBuff.commandBufferHandle(), &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
 }
@@ -706,21 +737,21 @@ inline void VulkanContext::bindGraphicsDescriptorSets(const CommandBuffer & cmdB
                             static_cast<std::uint32_t>(descriptorSets.size()), descriptorSets.data(), 0, nullptr);
 }
 
-inline void VulkanContext::bindVertexBuffer(const CommandBuffer & cmdBuff, VkBuffer vb, const std::uint32_t offset) const
+inline void VulkanContext::bindVertexBuffer(const CommandBuffer & cmdBuff, VkBuffer vb, const std::uint32_t offsetInBytes) const
 {
     assert(vb != VK_NULL_HANDLE);
     assert(cmdBuff.isInRecordingState());
     const VkBuffer vertexBuffers[] = { vb };
-    const VkDeviceSize offsets[]   = { offset };
+    const VkDeviceSize offsets[]   = { offsetInBytes };
     vkCmdBindVertexBuffers(cmdBuff.commandBufferHandle(), 0, 1, vertexBuffers, offsets);
 }
 
 inline void VulkanContext::bindIndexBuffer(const CommandBuffer & cmdBuff, VkBuffer ib,
-                                           const VkIndexType type, const std::uint32_t offset) const
+                                           const VkIndexType type, const std::uint32_t offsetInBytes) const
 {
     assert(ib != VK_NULL_HANDLE);
     assert(cmdBuff.isInRecordingState());
-    vkCmdBindIndexBuffer(cmdBuff.commandBufferHandle(), ib, offset, type);
+    vkCmdBindIndexBuffer(cmdBuff.commandBufferHandle(), ib, offsetInBytes, type);
 }
 
 inline void VulkanContext::drawUnindexed(const CommandBuffer & cmdBuff,
