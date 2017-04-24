@@ -57,9 +57,13 @@ public:
     void setSize(Size2D newSize, bool generateEvent = true);
 
     // Window/system events:
-    std::function<bool()>             onClose;  // Called when the user tries to close the window.
-    std::function<void()>             onRedraw; // Called every run of the event loop to repaint the screen.
-    std::function<void(const Size2D)> onResize; // Called when the user resizes the window.
+    std::function<bool()>                 onClose;            // Called when the user tries to close the window.
+    std::function<void()>                 onRedraw;           // Called every run of the event loop to repaint the screen.
+    std::function<void(Size2D)>           onResize;           // Called when the user resizes the window.
+    std::function<void(int)>              onMouseScroll;      // Mouse wheel scroll event - param is the wheel delta: -1,0,+1.
+    std::function<void(bool, bool, bool)> onMouseButtonClick; // Mouse click, each param is a btn: (lmb_down, mmb_down, rmb_down).
+    std::function<void(unsigned)>         onVirtKeyPress;     // Virtual Key pressed - param is either a char or a virtual key code.
+    std::function<void(char)>             onKeyChar;          // Character input in the window.
 
 private:
 

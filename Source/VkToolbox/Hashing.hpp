@@ -101,4 +101,48 @@ struct Hash64 final
     bool operator != (const Hash64 other) const { return this->value != other.value; }
 };
 
+// ========================================================
+// struct StrId:
+// ========================================================
+
+template<typename StrType>
+struct StrId final
+{
+    StrType name; // Human readable string.
+    Hash64  hash; // Hash of name string.
+
+    StrId() = default;
+    StrId(const StrId & other) = default;
+    StrId & operator = (const StrId & other) = default;
+
+    StrId(const StrType & s, const Hash64 & h)
+        : name{ s }, hash{ h }
+    { }
+
+    explicit StrId(const StrType & s)
+        : name{ s }, hash{ name.c_str(), name.length() }
+    { }
+
+    explicit StrId(const char * const cstr)
+        : name{ cstr }, hash{ name.c_str(), name.length() }
+    { }
+
+    StrId(StrId && other)
+        : name{ std::move(other.name) }, hash{ std::move(other.hash) }
+    { }
+
+    StrId & operator = (StrId && other)
+    {
+        name = std::move(other.name);
+        hash = std::move(other.hash);
+        return *this;
+    }
+
+    bool operator == (const StrId & other) const { return this->hash == other.hash; }
+    bool operator != (const StrId & other) const { return this->hash != other.hash; }
+
+    const char * c_str() const { return name.c_str(); }
+    bool isNull() const { return hash.isNull(); }
+};
+
 } // namespace VkToolbox

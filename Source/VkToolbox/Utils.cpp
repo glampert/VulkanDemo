@@ -9,7 +9,6 @@
 #include "Utils.hpp"
 #include "External.hpp"
 
-#include <cstdio>
 #include <direct.h>
 #include <sys/stat.h>
 
@@ -29,13 +28,7 @@ std::unique_ptr<char[]> loadTextFile(const char * const inFilename, std::size_t 
 
     // We won't be performing any text operations in the file, just read all of it
     // with a single fread(), so it can be opened as if it was binary.
-    #ifdef _MSC_VER
-    FILE * fileIn = nullptr;
-    fopen_s(&fileIn, inFilename, "rb");
-    #else // !_MSC_VER
-    FILE * fileIn = std::fopen(inFilename, "rb");
-    #endif // _MSC_VER
-
+    ScopedFileHandle fileIn = openFile(inFilename, "rb");
     if (fileIn == nullptr)
     {
         (*outFileSize) = 0;
@@ -48,7 +41,6 @@ std::unique_ptr<char[]> loadTextFile(const char * const inFilename, std::size_t 
 
     if (fileLength <= 0 || std::ferror(fileIn))
     {
-        std::fclose(fileIn);
         (*outFileSize) = 0;
         return nullptr;
     }
@@ -56,7 +48,6 @@ std::unique_ptr<char[]> loadTextFile(const char * const inFilename, std::size_t 
     std::unique_ptr<char[]> fileContents{ new char[fileLength + 1] };
     if (std::fread(fileContents.get(), 1, fileLength, fileIn) != std::size_t(fileLength))
     {
-        std::fclose(fileIn);
         (*outFileSize) = 0;
         return nullptr;
     }
@@ -64,8 +55,21 @@ std::unique_ptr<char[]> loadTextFile(const char * const inFilename, std::size_t 
     fileContents[fileLength] = '\0';
     (*outFileSize) = fileLength;
 
-    std::fclose(fileIn);
     return fileContents;
+}
+
+FILE * openFile(const char * const filename, const char * const mode)
+{
+    assert(filename != nullptr && mode != nullptr);
+
+    #ifdef _MSC_VER
+    FILE * file = nullptr;
+    fopen_s(&file, filename, mode);
+    #else // !_MSC_VER
+    FILE * file = std::fopen(filename, mode);
+    #endif // _MSC_VER
+
+    return file;
 }
 
 bool probeFile(const char * const filename)

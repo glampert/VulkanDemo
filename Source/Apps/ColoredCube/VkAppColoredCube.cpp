@@ -82,7 +82,7 @@ VULKAN_DEMO_REGISTER_APP(VkAppColoredCube);
 VkAppColoredCube::VkAppColoredCube(const StartupOptions & options)
     : VulkanDemoApp{ options }
     , m_cmdPool{ context() }
-    , m_shaderProgram{ context(), strReg().access(m_shaderFilename) }
+    , m_shaderProgram{ context(), m_shaderFilename }
     , m_descriptorSetPool{ context() }
     , m_descriptorSetLayout{ context() }
     , m_pipelineStateLayout{ context() }
@@ -203,13 +203,13 @@ void VkAppColoredCube::updateBuffers(CommandBuffer & cmdBuff)
 {
     // Since the geometry never changes, we don't need to issue
     // a GPU copy command more than once!
-    static bool vbUploadedToGpu = false;
+    static bool s_vbUploadedToGpu = false;
 
-    if (!vbUploadedToGpu)
+    if (!s_vbUploadedToGpu)
     {
         m_vertexBuffer.uploadStagingToGpu(cmdBuff);
         m_indexBuffer.uploadStagingToGpu(cmdBuff);
-        vbUploadedToGpu = true;
+        s_vbUploadedToGpu = true;
     }
 
     //

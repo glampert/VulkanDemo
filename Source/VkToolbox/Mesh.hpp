@@ -15,6 +15,8 @@
 namespace VkToolbox
 {
 
+#define VKTB_MESH_MODELS_PATH "Assets/Models/"
+
 // 32 bits indexing to support large meshes.
 using MeshIndex = std::uint32_t;
 constexpr VkIndexType MeshVkIndexType = VK_INDEX_TYPE_UINT32;
@@ -71,8 +73,20 @@ struct MeshMaterial final
     //TODO
 };
 
+struct MeshSaveHeader final
+{
+    std::uint32_t magic; // BMSH 4cc
+    std::int32_t  vertexCount;
+    std::int32_t  indexCount;
+    std::int32_t  submeshCount;
+    std::int32_t  materialCount;
+    // Arrays of data follow in the same order.
+};
+
 struct Mesh final
 {
+    static const char * const BinaryFormatFileExt;
+
     std::vector<MeshVertex>     vertexes;
     std::vector<MeshIndex>      indexes;
     std::vector<MeshSubSection> submeshes;
@@ -90,6 +104,10 @@ struct Mesh final
     bool initFromFile(const char * filePath, float vertexScaling = 1.0f);
     bool isInitialized() const;
     void shutdown();
+
+    // Write/load the optimized binary representation from file.
+    bool saveBinary(const char * filePath) const;
+    bool loadBinary(const char * filePath);
 };
 
 // ========================================================

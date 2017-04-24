@@ -213,19 +213,8 @@ static void assimpImportMeshMain(const aiScene & inScene, const float vertexScal
     }
 }
 
-// ========================================================
-// Mesh:
-// ========================================================
-
-bool Mesh::initFromFile(const char * const filePath, const float vertexScaling)
+static bool meshImportWithAssimp(const char * const filePath, const float vertexScaling, Mesh & outMesh)
 {
-    assert(filePath != nullptr && filePath[0] != '\0');
-    if (!probeFile(filePath))
-    {
-        Log::warningF("Mesh file '%s' does not exist! Can't load mesh from it.", filePath);
-        return false;
-    }
-
     // Optional ASSIMP log hook:
     #if VKTB_REGISTER_ASSIMP_LOG_CALLBACK
     std::call_once(s_assimpLogHookRegistered, []() {
@@ -244,8 +233,7 @@ bool Mesh::initFromFile(const char * const filePath, const float vertexScaling)
                                               aiProcess_OptimizeGraph            |
                                               aiProcess_ImproveCacheLocality     |
                                               aiProcess_GenSmoothNormals         |
-                                              aiProcess_CalcTangentSpace         |
-                                              aiProcess_SplitLargeMeshes);
+                                              aiProcess_CalcTangentSpace);
 
     Assimp::Importer importer;
     const aiScene * scene = importer.ReadFile(filePath, PostProcessingFlags);
@@ -262,15 +250,41 @@ bool Mesh::initFromFile(const char * const filePath, const float vertexScaling)
     }
 
     // Shutdown in case the Mesh object is being recycled.
-    if (isInitialized())
+    if (outMesh.isInitialized())
     {
-        shutdown();
+        outMesh.shutdown();
     }
 
-    assimpImportMeshMain(*scene, vertexScaling, *this);
+    assimpImportMeshMain(*scene, vertexScaling, outMesh);
 
     Log::debugF("Mesh '%s' imported successfully.", filePath);
     return true;
+}
+
+// ========================================================
+// Mesh:
+// ========================================================
+
+const char * const Mesh::BinaryFormatFileExt = ".bmesh";
+
+bool Mesh::initFromFile(const char * const filePath, const float vertexScaling)
+{
+    assert(filePath != nullptr && filePath[0] != '\0');
+    if (!probeFile(filePath))
+    {
+        Log::warningF("Mesh file '%s' does not exist! Can't load mesh from it.", filePath);
+        return false;
+    }
+
+    if (str_ref{ filePath }.ends_with(BinaryFormatFileExt))
+    {
+        return loadBinary(filePath); // vertexScaling is ignored by the binary loader
+    }
+    else
+    {
+        // This can be very slow - prefer the binary format for large models.
+        return meshImportWithAssimp(filePath, vertexScaling, *this);
+    }
 }
 
 bool Mesh::isInitialized() const
@@ -284,6 +298,69 @@ void Mesh::shutdown()
     indexes.clear();
     submeshes.clear();
     materials.clear();
+}
+
+bool Mesh::saveBinary(const char * const filePath) const
+{
+    ScopedFileHandle fileOut = openFile(filePath, "wb");
+    if (fileOut == nullptr)
+    {
+        Log::errorF("Could not create mesh save file '%s'.", filePath);
+        return false;
+    }
+
+    MeshSaveHeader header;
+    header.magic         = 'HSMB';
+    header.vertexCount   = vertexCount();
+    header.indexCount    = indexCount();
+    header.submeshCount  = submeshCount();
+    header.materialCount = materialCount();
+    writeStructToFile(fileOut, header);
+
+    writeArrayToFile(fileOut, vertexes.data(),  vertexes.size());
+    writeArrayToFile(fileOut, indexes.data(),   indexes.size());
+    writeArrayToFile(fileOut, submeshes.data(), submeshes.size());
+    writeArrayToFile(fileOut, materials.data(), materials.size());
+
+    return true;
+}
+
+bool Mesh::loadBinary(const char * const filePath)
+{
+    ScopedFileHandle fileIn = openFile(filePath, "rb");
+    if (fileIn == nullptr)
+    {
+        Log::errorF("Could not open mesh save file '%s'.", filePath);
+        return false;
+    }
+
+    MeshSaveHeader header;
+    readStructFromFile(fileIn, &header);
+
+    if (header.magic != 'HSMB')
+    {
+        Log::errorF("File '%s' is not a binary mesh! Bad magic!", filePath);
+        return false;
+    }
+
+    // Shutdown in case the Mesh object is being recycled.
+    if (isInitialized())
+    {
+        shutdown();
+    }
+
+    vertexes.resize(header.vertexCount);
+    indexes.resize(header.indexCount);
+    submeshes.resize(header.submeshCount);
+    materials.resize(header.materialCount);
+
+    readArrayFromFile(fileIn, vertexes.data(),  vertexes.size());
+    readArrayFromFile(fileIn, indexes.data(),   indexes.size());
+    readArrayFromFile(fileIn, submeshes.data(), submeshes.size());
+    readArrayFromFile(fileIn, materials.data(), materials.size());
+
+    Log::debugF("Finished loading binary mesh from '%s'.", filePath);
+    return true;
 }
 
 // ========================================================

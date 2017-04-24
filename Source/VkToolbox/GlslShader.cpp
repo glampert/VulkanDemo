@@ -355,20 +355,17 @@ const enum_array<GlslShaderStage::Id, VkShaderStageFlagBits> GlslShaderStage::Vk
 // class GlslShader:
 // ========================================================
 
-GlslShader::GlslShader(const VulkanContext & vkContext, ResourceId id)
-    : Resource{ &vkContext, id }
+GlslShader::GlslShader(const VulkanContext & vkContext, StrId<str> && id)
+    : m_vkContext{ &vkContext }
+    , m_resId{ std::move(id) }
     , m_sourceCode{ nullptr }
     , m_stages{}
 {
 }
 
-GlslShader::~GlslShader()
-{
-    GlslShader::shutdown();
-}
-
 GlslShader::GlslShader(GlslShader && other)
-    : Resource{ other.m_vkContext, other.m_resId }
+    : m_vkContext{ other.m_vkContext }
+    , m_resId{ std::move(other.m_resId) }
     , m_sourceCode{ std::move(other.m_sourceCode) }
     , m_stages{ std::move(other.m_stages) }
 {
@@ -377,10 +374,10 @@ GlslShader::GlslShader(GlslShader && other)
 
 GlslShader & GlslShader::operator = (GlslShader && other)
 {
-    GlslShader::shutdown();
+    shutdown();
 
     m_vkContext  = other.m_vkContext;
-    m_resId      = other.m_resId;
+    m_resId      = std::move(other.m_resId);
     m_sourceCode = std::move(other.m_sourceCode);
     m_stages     = std::move(other.m_stages);
 
@@ -415,7 +412,7 @@ bool GlslShader::reloadCurrent()
 
     auto oldSourceCode = std::move(m_sourceCode);
 
-    GlslShader::unload();
+    unload();
 
     m_sourceCode = std::move(oldSourceCode);
     m_stages     = std::move(newStages);
@@ -448,7 +445,7 @@ bool GlslShader::load()
         return false;
     }
 
-    GlslShader::unload();
+    unload();
 
     m_sourceCode = std::move(newSourceCode);
     m_stages     = std::move(newStages);
@@ -474,13 +471,16 @@ void GlslShader::unload()
 
 void GlslShader::shutdown()
 {
-    GlslShader::unload();
-    Resource::clear();
+    unload();
+
+    m_vkContext = nullptr;
+    m_resId     = {};
 }
 
 void GlslShader::clear()
 {
-    Resource::clear();
+    m_vkContext  = nullptr;
+    m_resId      = {};
     m_sourceCode = nullptr;
     m_stages.clear();
 }

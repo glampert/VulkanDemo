@@ -7,6 +7,7 @@
 // ================================================================================================
 
 #include "OSWindow.hpp"
+#include "Input.hpp"
 #include "Log.hpp"
 
 #if defined(WIN32) || defined(WIN64)
@@ -34,7 +35,7 @@ extern "C"
 
 static LRESULT CALLBACK OSWindow_WndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
-    auto window = reinterpret_cast<OSWindow *>(GetWindowLongPtr(hWnd, GWLP_USERDATA));
+    auto * window = reinterpret_cast<OSWindow *>(GetWindowLongPtr(hWnd, GWLP_USERDATA));
     if (window == nullptr)
     {
         // First few messages when CreateWindow is called - we don't have a pointer yet.
@@ -61,9 +62,68 @@ static LRESULT CALLBACK OSWindow_WndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LP
             }
             return 0;
         }
+    case WM_MOUSEWHEEL :
+        {
+            const int zDelta = GET_WHEEL_DELTA_WPARAM(wParam);
+            MouseState::wheelDelta = clamp(zDelta, -1, +1);
+            if (window->onMouseScroll)
+            {
+                window->onMouseScroll(MouseState::wheelDelta);
+            }
+            return 0;
+        }
+    case WM_CHAR :
+        {
+            if (window->onKeyChar)
+            {
+                const char keyChar = wParam & 0xFF;
+                window->onKeyChar(keyChar);
+                return 0;
+            }
+            break;
+        }
+    case WM_KEYDOWN :
+        {
+            if (window->onVirtKeyPress)
+            {
+                const auto keyCode = static_cast<unsigned>(wParam);
+                window->onVirtKeyPress(keyCode);
+                return 0;
+            }
+            break;
+        }
+    case WM_LBUTTONDOWN :
+        {
+            if (window->onMouseButtonClick)
+            {
+                window->onMouseButtonClick(true, false, false);
+                return 0;
+            }
+            break;
+        }
+    case WM_MBUTTONDOWN :
+        {
+            if (window->onMouseButtonClick)
+            {
+                window->onMouseButtonClick(false, true, false);
+                return 0;
+            }
+            break;
+        }
+    case WM_RBUTTONDOWN :
+        {
+            if (window->onMouseButtonClick)
+            {
+                window->onMouseButtonClick(false, false, true);
+                return 0;
+            }
+            break;
+        }
     default :
-        return DefWindowProc(hWnd, uMsg, wParam, lParam);
+        break;
     } // switch
+
+    return DefWindowProc(hWnd, uMsg, wParam, lParam);
 }
 
 } // extern "C"
@@ -151,6 +211,10 @@ void OSWindow::runEventLoop()
         {
             onRedraw();
         }
+
+        // Hacky way to reset the mouse wheel scroll, since the value
+        // is only updated when we get a scroll event in the window.
+        MouseState::wheelDelta = 0;
 
         // Poll system events:
         while (PeekMessage(&msg, reinterpret_cast<HWND>(windowHandle()), 0, 0, PM_REMOVE))

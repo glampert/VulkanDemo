@@ -8,12 +8,13 @@
 // ================================================================================================
 
 #include <cassert>
-#include <cstring>
 #include <cmath>
+#include <cstdio>
+#include <cstring>
 
-#include <utility>
 #include <memory>
 #include <type_traits>
+#include <utility>
 
 class str;
 
@@ -215,14 +216,75 @@ inline bool strStartsWith(const char * const str, const char * const prefix)
     return std::strncmp(str, prefix, std::strlen(prefix)) == 0;
 }
 
-// Open and load a file into memory, appending a null byte at the end to make it a valid C-style string.
-// outFileSize is mandatory and must not be null.
-std::unique_ptr<char[]> loadTextFile(const char * const inFilename, std::size_t * outFileSize);
-
 // Test if the file exists.
 bool probeFile(const char * filename);
 
 // Get the CWD.
 const char * currentPath(str * inOutPathStr);
+
+// Open and load a file into memory, appending a null byte at the end to make it a valid C-style string.
+// outFileSize is mandatory and must not be null.
+std::unique_ptr<char[]> loadTextFile(const char * inFilename, std::size_t * outFileSize);
+
+// "Portable" fopen, since VS deprecates std::fopen and warns about it.
+FILE * openFile(const char * filename, const char * mode);
+
+// Shorthand helpers to dump a struct (or array of structs) to file. Assumes T is POD.
+template<typename T>
+inline bool writeStructToFile(FILE * file, const T & data)
+{
+    const auto n = std::fwrite(&data, sizeof(T), 1, file);
+    assert(n == 1); return (n == 1);
+}
+template<typename T>
+inline bool writeArrayToFile(FILE * file, const T * const data, const std::size_t count)
+{
+    const auto n = std::fwrite(data, sizeof(T), count, file);
+    assert(n == count); return (n == count);
+}
+
+// Helpers read back the binary dump of a struct (or array of structs) from file. Assumes T is POD.
+template<typename T>
+inline bool readStructFromFile(FILE * file, T * outData)
+{
+    const auto n = std::fread(outData, sizeof(T), 1, file);
+    assert(n == 1); return (n == 1);
+}
+template<typename T>
+inline bool readArrayFromFile(FILE * file, T * outData, const std::size_t count)
+{
+    const auto n = std::fread(outData, sizeof(T), count, file);
+    assert(n == count); return (n == count);
+}
+
+// So we don't have to be fclosein' all the time.
+class ScopedFileHandle final
+{
+    FILE * m_fileHandle;
+
+public:
+    ScopedFileHandle(const ScopedFileHandle & other) = delete;
+    ScopedFileHandle & operator = (const ScopedFileHandle & other) = delete;
+
+    ScopedFileHandle(FILE * fh)
+        : m_fileHandle{ fh }
+    { }
+
+    ~ScopedFileHandle()
+    {
+        close();
+    }
+
+    void close()
+    {
+        if (m_fileHandle != nullptr)
+        {
+            std::fclose(m_fileHandle);
+            m_fileHandle = nullptr;
+        }
+    }
+
+    operator FILE*() const { return m_fileHandle; }
+};
 
 } // namespace VkToolbox

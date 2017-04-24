@@ -13,6 +13,7 @@
 #include "VkToolbox/Buffers.hpp"
 #include "VkToolbox/Texture.hpp"
 #include "VkToolbox/Mesh.hpp"
+#include "VkToolbox/Input.hpp"
 
 using namespace VkToolbox;
 
@@ -90,7 +91,7 @@ VULKAN_DEMO_REGISTER_APP(VkAppTeapotModel);
 VkAppTeapotModel::VkAppTeapotModel(const StartupOptions & options)
     : VulkanDemoApp{ options }
     , m_cmdPool{ context() }
-    , m_shaderProgram{ context(), strReg().access(m_shaderFilename) }
+    , m_shaderProgram{ context(), m_shaderFilename }
     , m_descriptorSetPool{ context() }
     , m_descriptorSetLayout{ context() }
     , m_pipelineStateLayout{ context() }
@@ -98,7 +99,7 @@ VkAppTeapotModel::VkAppTeapotModel(const StartupOptions & options)
     , m_uniformBuffer{ context() }
     , m_vertexBuffer{ context() }
     , m_indexBuffer{ context() }
-    , m_texture{ context(), strReg().access(m_textureName) }
+    , m_texture{ context(), m_textureName }
     , m_sampler{ context() }
 {
     m_shaderProgram.load();
@@ -123,6 +124,15 @@ VkAppTeapotModel::VkAppTeapotModel(const StartupOptions & options)
     initVertexBuffer();
 
     context().setDefaultClearColor({ 0.4f, 0.4f, 0.4f, 1.0f });
+
+    // Quit on [ESCAPE]
+    window().onVirtKeyPress = [this](unsigned keyCode)
+    {
+        if (keyCode == Key::VK_ESCAPE)
+        {
+            window().setStopEventLoop(true);
+        }
+    };
 }
 
 void VkAppTeapotModel::initDescriptorSets()
@@ -227,8 +237,8 @@ void VkAppTeapotModel::initTexture()
 
 void VkAppTeapotModel::initVertexBuffer()
 {
-    #define MESH_FILE_AND_SCALE "Assets/Models/Teapot/teapot.obj",0.1f
-    //#define MESH_FILE_AND_SCALE "Assets/Models/Cube/cube.obj",5.0f
+    //#define MESH_FILE_AND_SCALE  VKTB_MESH_MODELS_PATH "Cube/cube.obj", 5.0f
+    #define MESH_FILE_AND_SCALE  VKTB_MESH_MODELS_PATH "Teapot/teapot.obj", 0.1f
 
     m_mesh.initFromFile(MESH_FILE_AND_SCALE);
 
@@ -253,13 +263,13 @@ void VkAppTeapotModel::updateBuffers(CommandBuffer & cmdBuff)
 {
     // Since the geometry never changes, we don't need to issue
     // a GPU copy command more than once!
-    static bool vbUploadedToGpu = false;
+    static bool s_vbUploadedToGpu = false;
 
-    if (!vbUploadedToGpu)
+    if (!s_vbUploadedToGpu)
     {
         m_vertexBuffer.uploadStagingToGpu(cmdBuff);
         m_indexBuffer.uploadStagingToGpu(cmdBuff);
-        vbUploadedToGpu = true;
+        s_vbUploadedToGpu = true;
     }
 
     //

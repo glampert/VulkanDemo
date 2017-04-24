@@ -10,7 +10,6 @@
 #include "VkToolbox/Utils.hpp"
 #include "VkToolbox/OSWindow.hpp"
 #include "VkToolbox/VulkanContext.hpp"
-#include "VkToolbox/StringRegistry.hpp"
 
 #include <chrono>
 using TimePoint = std::chrono::time_point<std::chrono::high_resolution_clock>;
@@ -64,7 +63,6 @@ public:
 
     inline VkToolbox::OSWindow       & window()  { return m_window;        }
     inline VkToolbox::VulkanContext  & context() { return m_vkContext;     }
-    inline VkToolbox::StringRegistry & strReg()  { return m_strRegistry;   }
     inline cfg::CVarManager          & cvarMgr() { return *sm_cvarManager; }
     inline cfg::CommandManager       & cmdMgr()  { return *sm_cmdManager;  }
 
@@ -72,8 +70,6 @@ protected:
 
     VkToolbox::OSWindow          m_window;
     VkToolbox::VulkanContext     m_vkContext;
-    VkToolbox::StringRegistry    m_strRegistry;
-
     static cfg::CVarManager    * sm_cvarManager;
     static cfg::CommandManager * sm_cmdManager;
 

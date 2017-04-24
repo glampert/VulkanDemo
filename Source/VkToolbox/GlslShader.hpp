@@ -7,8 +7,8 @@
 // Brief: GLSL-syntax Vulkan shader program.
 // ================================================================================================
 
-#include "Resource.hpp"
-#include "FixedSizeArray.hpp"
+#include "VulkanContext.hpp"
+#include "Hashing.hpp"
 
 namespace VkToolbox
 {
@@ -107,7 +107,6 @@ void shutdown();
 // ========================================================
 
 class GlslShader final
-    : public Resource
 {
 public:
 
@@ -118,18 +117,22 @@ public:
     static void shutdownClass();
 
     // Constructor/destructor:
-    GlslShader(const VulkanContext & vkContext, ResourceId id);
+    GlslShader(const VulkanContext & vkContext, const char * id);
+    GlslShader(const VulkanContext & vkContext, StrId<str> && id);
     ~GlslShader();
 
     // Movable.
     GlslShader(GlslShader && other);
     GlslShader & operator = (GlslShader && other);
 
-    // Resource overrides:
-    bool load() override;
-    void unload() override;
-    void shutdown() override;
-    bool isLoaded() const override;
+    // Resourcing methods:
+    bool load();
+    void unload();
+    void shutdown();
+    bool isLoaded() const;
+    bool isShutdown() const;
+    const VulkanContext & context() const;
+    const StrId<str> & resourceId() const;
 
     // Reload using the current GLSL source code, rather than reloading from file.
     bool reloadCurrent();
@@ -156,8 +159,7 @@ public:
 
 private:
 
-    // Override from Resource.
-    void clear() override;
+    void clear();
 
     // Creates a single VK shader module from the null-terminated GLSL source code strings.
     static VkShaderModule createShaderModule(const VulkanContext & vkContext,
@@ -176,6 +178,9 @@ private:
 
 private:
 
+    const VulkanContext * m_vkContext;
+    StrId<str> m_resId;
+
     // GLSL shader string (possibly containing more than one stage).
     std::unique_ptr<char[]> m_sourceCode;
 
@@ -186,9 +191,34 @@ private:
 
 // ========================================================
 
+inline GlslShader::GlslShader(const VulkanContext & vkContext, const char * const id)
+    : GlslShader{ vkContext, StrId<str>{ id } }
+{
+}
+
+inline GlslShader::~GlslShader()
+{
+    shutdown();
+}
+
 inline bool GlslShader::isLoaded() const
 {
     return (m_sourceCode != nullptr && !m_stages.empty());
+}
+
+inline bool GlslShader::isShutdown() const
+{
+    return (m_vkContext == nullptr);
+}
+
+inline const VulkanContext & GlslShader::context() const
+{
+    return *m_vkContext;
+}
+
+inline const StrId<str> & GlslShader::resourceId() const
+{
+    return m_resId;
 }
 
 inline const char * GlslShader::sourceCode() const

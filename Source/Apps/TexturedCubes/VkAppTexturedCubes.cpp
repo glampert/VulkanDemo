@@ -91,7 +91,7 @@ VULKAN_DEMO_REGISTER_APP(VkAppTexturedCubes);
 VkAppTexturedCubes::VkAppTexturedCubes(const StartupOptions & options)
     : VulkanDemoApp{ options }
     , m_cmdPool{ context() }
-    , m_shaderProgram{ context(), strReg().access(m_shaderFilename) }
+    , m_shaderProgram{ context(), m_shaderFilename }
     , m_descriptorSetPool{ context() }
     , m_descriptorSetLayout{ context() }
     , m_pipelineStateLayout{ context() }
@@ -99,8 +99,8 @@ VkAppTexturedCubes::VkAppTexturedCubes(const StartupOptions & options)
     , m_uniformBuffer{ context() }
     , m_vertexBuffer{ context() }
     , m_indexBuffer{ context() }
-    , m_texture0{ context(), strReg().access(m_texture0Name) }
-    , m_texture1{ context(), strReg().access(m_texture1Name) }
+    , m_texture0{ context(), m_texture0Name }
+    , m_texture1{ context(), m_texture1Name }
     , m_sharedSampler{ context() }
 {
     m_shaderProgram.load();
@@ -270,13 +270,13 @@ void VkAppTexturedCubes::updateBuffers(CommandBuffer & cmdBuff)
 {
     // Since the geometry never changes, we don't need to issue
     // a GPU copy command more than once!
-    static bool vbUploadedToGpu = false;
+    static bool s_vbUploadedToGpu = false;
 
-    if (!vbUploadedToGpu)
+    if (!s_vbUploadedToGpu)
     {
         m_vertexBuffer.uploadStagingToGpu(cmdBuff);
         m_indexBuffer.uploadStagingToGpu(cmdBuff);
-        vbUploadedToGpu = true;
+        s_vbUploadedToGpu = true;
     }
 
     //

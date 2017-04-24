@@ -7,8 +7,8 @@
 // Brief: Vulkan texture wrapper.
 // ================================================================================================
 
-#include "Resource.hpp"
-#include "Image.hpp"
+#include "VulkanContext.hpp"
+#include "Hashing.hpp"
 
 namespace VkToolbox
 {
@@ -62,7 +62,6 @@ private:
 // ========================================================
 
 class Texture final
-    : public Resource
 {
 public:
 
@@ -70,18 +69,22 @@ public:
     static void initClass();
     static void shutdownClass();
 
-    Texture(const VulkanContext & vkContext, ResourceId id);
+    Texture(const VulkanContext & vkContext, const char * id);
+    Texture(const VulkanContext & vkContext, StrId<str> && id);
     ~Texture();
 
     // Movable.
     Texture(Texture && other);
     Texture & operator = (Texture && other);
 
-    // Resource overrides:
-    bool load() override;
-    void unload() override;
-    void shutdown() override;
-    bool isLoaded() const override;
+    // Resourcing methods:
+    bool load();
+    void unload();
+    void shutdown();
+    bool isLoaded() const;
+    bool isShutdown() const;
+    const VulkanContext & context() const;
+    const StrId<str> & resourceId() const;
 
     // Accessors:
     VkImage imageHandle() const;
@@ -109,19 +112,25 @@ public:
 
 private:
 
-    void clear() override;
+    void clear();
     void initVkTextureData(const Image & image);
 
-    VkImage         m_imageHandle;
-    VkImageView     m_imageViewHandle;
-    VkDeviceMemory  m_imageMemHandle;
-    VkImage         m_stagingImageHandle;
-    VkDeviceMemory  m_stagingImageMemHandle;
-    Size2D          m_imageSize;
-    VkFormat        m_imageFormat;
+    const VulkanContext * m_vkContext;
+    StrId<str> m_resId;
+
+    VkImage m_imageHandle;
+    VkImageView m_imageViewHandle;
+    VkDeviceMemory m_imageMemHandle;
+
+    VkImage m_stagingImageHandle;
+    VkDeviceMemory m_stagingImageMemHandle;
+
+    Size2D m_imageSize;
+    VkFormat m_imageFormat;
     VkImageViewType m_imageViewType;
-    std::uint32_t   m_imageMipmaps   : 31;
-    std::uint32_t   m_dontGenMipmaps : 1;
+
+    std::uint32_t m_imageMipmaps   : 31;
+    std::uint32_t m_dontGenMipmaps : 1;
 };
 
 // ========================================================
@@ -154,14 +163,34 @@ inline bool Sampler::isInitialized() const
 // Texture inline methods:
 // ========================================================
 
+inline Texture::Texture(const VulkanContext & vkContext, const char * const id)
+    : Texture{ vkContext, StrId<str>{ id } }
+{
+}
+
 inline Texture::~Texture()
 {
-    Texture::shutdown();
+    shutdown();
 }
 
 inline bool Texture::isLoaded() const
 {
     return (m_imageHandle != nullptr);
+}
+
+inline bool Texture::isShutdown() const
+{
+    return (m_vkContext == nullptr);
+}
+
+inline const VulkanContext & Texture::context() const
+{
+    return *m_vkContext;
+}
+
+inline const StrId<str> & Texture::resourceId() const
+{
+    return m_resId;
 }
 
 inline VkImage Texture::imageHandle() const

@@ -86,8 +86,9 @@ const VkSamplerCreateInfo & Sampler::defaults()
 // class Texture:
 // ========================================================
 
-Texture::Texture(const VulkanContext & vkContext, ResourceId id)
-    : Resource{ &vkContext, id }
+Texture::Texture(const VulkanContext & vkContext, StrId<str> && id)
+    : m_vkContext{ &vkContext }
+    , m_resId{ std::move(id) }
     , m_imageHandle{ VK_NULL_HANDLE }
     , m_imageViewHandle{ VK_NULL_HANDLE }
     , m_imageMemHandle{ VK_NULL_HANDLE }
@@ -102,7 +103,8 @@ Texture::Texture(const VulkanContext & vkContext, ResourceId id)
 }
 
 Texture::Texture(Texture && other)
-    : Resource{ other.m_vkContext, other.m_resId }
+    : m_vkContext{ other.m_vkContext }
+    , m_resId{ std::move(other.m_resId) }
     , m_imageHandle{ other.m_imageHandle }
     , m_imageViewHandle{ other.m_imageViewHandle }
     , m_imageMemHandle{ other.m_imageMemHandle }
@@ -119,10 +121,10 @@ Texture::Texture(Texture && other)
 
 Texture & Texture::operator = (Texture && other)
 {
-    Texture::shutdown();
+    shutdown();
 
     m_vkContext             = other.m_vkContext;
-    m_resId                 = other.m_resId;
+    m_resId                 = std::move(other.m_resId);
     m_imageHandle           = other.m_imageHandle;
     m_imageViewHandle       = other.m_imageViewHandle;
     m_imageMemHandle        = other.m_imageMemHandle;
@@ -240,13 +242,16 @@ void Texture::releaseStagingImage()
 
 void Texture::shutdown()
 {
-    Texture::unload();
-    Resource::clear();
+    unload();
+
+    m_vkContext = nullptr;
+    m_resId     = {};
 }
 
 void Texture::clear()
 {
-    Resource::clear();
+    m_vkContext = nullptr;
+    m_resId     = {};
 
     // Used by the move ops, so don't delete, just drop ownership.
     m_imageHandle           = VK_NULL_HANDLE;

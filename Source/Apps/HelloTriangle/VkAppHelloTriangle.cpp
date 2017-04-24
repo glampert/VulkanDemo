@@ -83,7 +83,7 @@ VULKAN_DEMO_REGISTER_APP(VkAppHelloTriangle);
 VkAppHelloTriangle::VkAppHelloTriangle(const StartupOptions & options)
     : VulkanDemoApp{ options }
     , m_cmdPool{ context() }
-    , m_shaderProgram{ context(), strReg().access(m_shaderFilename) }
+    , m_shaderProgram{ context(), m_shaderFilename }
     , m_uniformBuffer{ context() }
     , m_descriptorSetPool{ context() }
     , m_descriptorSetLayout{ context() }
@@ -186,14 +186,14 @@ void VkAppHelloTriangle::initPipeline()
 
 void VkAppHelloTriangle::updateUniformBuffer(CommandBuffer & cmdBuff)
 {
-    static int colorIndex = 0;
+    static int s_colorIndex = 0;
     const float time = timeSeconds();
 
     // Make the triangle colors flash using a sine wave
     const float s = std::abs(std::sin(time * HalfPI));
     if (s <= 0.0001f)
     {
-        colorIndex = (colorIndex + 1) % NumTintColors;
+        s_colorIndex = (s_colorIndex + 1) % NumTintColors;
     }
 
     const Vector4 tintColors[NumTintColors] = {
@@ -203,8 +203,8 @@ void VkAppHelloTriangle::updateUniformBuffer(CommandBuffer & cmdBuff)
         Vector4{ 1.0f, 0.1f, 0.1f, 1.0f } * s
     };
 
-    m_uniformBuffer.writeN(tintColors);   // offsets 0,1,2,3
-    m_uniformBuffer.write(colorIndex, 4); // offset 4
+    m_uniformBuffer.writeN(tintColors);     // offsets 0,1,2,3
+    m_uniformBuffer.write(s_colorIndex, 4); // offset 4
 
     m_uniformBuffer.uploadStagingToGpu(cmdBuff);
 }

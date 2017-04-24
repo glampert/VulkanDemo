@@ -34,9 +34,6 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="..\Source\VkToolbox\Resource.cpp">
-      <Filter>Source Files\VkToolbox</Filter>
-    </ClCompile>
     <ClCompile Include="..\Source\VkToolbox\GlslShader.cpp">
       <Filter>Source Files\VkToolbox</Filter>
     </ClCompile>
@@ -94,11 +91,11 @@
     <ClCompile Include="..\Source\Apps\TeapotModel\VkAppTeapotModel.cpp">
       <Filter>Source Files\Apps\TeapotModel</Filter>
     </ClCompile>
+    <ClCompile Include="..\Source\VkToolbox\Input.cpp">
+      <Filter>Source Files\VkToolbox</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="..\Source\VkToolbox\Resource.hpp">
-      <Filter>Source Files\VkToolbox</Filter>
-    </ClInclude>
     <ClInclude Include="..\Source\VkToolbox\GlslShader.hpp">
       <Filter>Source Files\VkToolbox</Filter>
     </ClInclude>
@@ -115,9 +112,6 @@
       <Filter>Source Files\External</Filter>
     </ClInclude>
     <ClInclude Include="..\Source\VkToolbox\Pool.hpp">
-      <Filter>Source Files\VkToolbox</Filter>
-    </ClInclude>
-    <ClInclude Include="..\Source\VkToolbox\StringRegistry.hpp">
       <Filter>Source Files\VkToolbox</Filter>
     </ClInclude>
     <ClInclude Include="..\Source\VkToolbox\Utils.hpp">
@@ -193,6 +187,12 @@
       <Filter>Source Files\VkToolbox</Filter>
     </ClInclude>
     <ClInclude Include="..\Source\VkToolbox\Mesh.hpp">
+      <Filter>Source Files\VkToolbox</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Source\VkToolbox\Input.hpp">
+      <Filter>Source Files\VkToolbox</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Source\VkToolbox\Camera.hpp">
       <Filter>Source Files\VkToolbox</Filter>
     </ClInclude>
   </ItemGroup>
