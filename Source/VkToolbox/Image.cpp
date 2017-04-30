@@ -24,11 +24,18 @@ const enum_array<Image::Format, const char *> Image::FormatStrings = {{
     "R8",
     "RG8",
     "RGB8",
-    "RGBA8"
+    "RGBA8",
+    "DXT1",
+    "DXT3",
+    "DXT5",
+    "RGTC1_ATI1N",
+    "RGTC2_ATI2N"
 }};
 
 Image::LoadOptions Image::sm_loadOptions;
 
+// ========================================================
+// Image:
 // ========================================================
 
 void Image::shutdown()
@@ -113,7 +120,7 @@ void Image::initWithCheckerPattern(const Size2D wh, const int squares)
     }
 }
 
-bool Image::initFromFile(const char * const filePath, str * outOptErrorInfo)
+bool Image::initFromFile(const char * const filePath)
 {
     assert(filePath != nullptr);
     assert(filePath[0] != '\0');
@@ -129,11 +136,7 @@ bool Image::initFromFile(const char * const filePath, str * outOptErrorInfo)
 
     if (newImageData == nullptr)
     {
-        if (outOptErrorInfo != nullptr)
-        {
-            outOptErrorInfo->setf("stdi_load() failed with error '%s' for image \"%s\".",
-                                  stbi_failure_reason(), filePath);
-        }
+        Log::errorF("stdi_load() failed with error '%s' for image \"%s\".", stbi_failure_reason(), filePath);
         return false;
     }
 
@@ -159,10 +162,7 @@ bool Image::initFromFile(const char * const filePath, str * outOptErrorInfo)
             fmt = Format::RGBA8;
             break;
         default: // Unsupported
-            if (outOptErrorInfo != nullptr)
-            {
-                outOptErrorInfo->setf("\"%s\": Image format not supported! components=%i", filePath, comps);
-            }
+            Log::errorF("\"%s\": Image format not supported! components=%i", filePath, comps);
             std::free(newImageData);
             return false;
         } // switch
@@ -195,7 +195,7 @@ bool Image::initFromFile(const char * const filePath, str * outOptErrorInfo)
     return true;
 }
 
-bool Image::writeToFile(const char * const filePath, const int surfaceIndex, str * outOptErrorInfo) const
+bool Image::writeToFile(const char * const filePath, const int surfaceIndex) const
 {
     assert(filePath != nullptr);
     assert(filePath[0] != '\0');
@@ -226,10 +226,7 @@ bool Image::writeToFile(const char * const filePath, const int surfaceIndex, str
     }
     else
     {
-        if (outOptErrorInfo != nullptr)
-        {
-            outOptErrorInfo->setf("Unsupported image format or unknown file extension in path \"%s\"!", filePath);
-        }
+        Log::errorF("Unsupported image format or unknown file extension in path \"%s\"!", filePath);
         return false;
     }
 }
@@ -799,6 +796,208 @@ void Image::setBaseSurfaceRect(const std::uint8_t * image, const int xOffset, co
                 setPixel(x + xOffset, y + yOffset, tempPixel);
             }
         }
+    }
+}
+
+// ========================================================
+// DDS file loading helpers:
+// ========================================================
+
+namespace DDS
+{
+
+#pragma pack(push, 1)
+
+struct PixelFormat
+{
+    std::uint32_t size;
+    std::uint32_t flags;
+    std::uint32_t fourCC;
+    std::uint32_t RGBBitCount;
+    std::uint32_t RBitMask;
+    std::uint32_t GBitMask;
+    std::uint32_t BBitMask;
+    std::uint32_t ABitMask;
+};
+
+struct FileHeader
+{
+    std::uint32_t fourCC;
+    std::uint32_t size;
+    std::uint32_t flags;
+    std::uint32_t height;
+    std::uint32_t width;
+    std::uint32_t pitchOrLinearSize;
+    std::uint32_t depth;
+    std::uint32_t mipMapCount;
+    std::uint32_t reserved1[11];
+    PixelFormat   pixelFormat;
+    std::uint32_t caps1;
+    std::uint32_t caps2;
+    std::uint32_t caps3;
+    std::uint32_t caps4;
+    std::uint32_t reserved2;
+};
+
+struct FileHeaderDX10
+{
+    // DDS DX10 has some extra fields...
+    std::uint32_t dxgiFormat;
+    std::uint32_t resourceDimension;
+    std::uint32_t miscFlag;
+    std::uint32_t arraySize;
+    std::uint32_t reserved;
+};
+
+#pragma pack(pop)
+
+} // namespace DDS
+
+// ========================================================
+// DXTCompressedImage:
+// ========================================================
+
+bool DXTCompressedImage::initFromFile(const char * const filePath)
+{
+    ScopedFileHandle fileIn = openFile(filePath, "rb");
+    if (fileIn == nullptr)
+    {
+        Log::errorF("Failed to load DXT image from '%s' - can't open file!", filePath);
+        return false;
+    }
+
+    DDS::FileHeader header = {};
+    readStructFromFile(fileIn, &header);
+
+    if (header.fourCC != ' SDD') // 'DDS '
+    {
+        Log::errorF("%s: Not a DDS file - invalid 4CC!", filePath);
+        return false;
+    }
+    if (header.mipMapCount == 0)
+    {
+        Log::errorF("%s: DDS header mipmap count is zero!", filePath);
+        return false;
+    }
+
+    bool dx10;
+    Format pixelFormat;
+    std::uint32_t blockSize;
+
+    if (header.pixelFormat.fourCC == '01XD') // 'DX10'
+    {
+        DDS::FileHeaderDX10 dx10Header;
+        readStructFromFile(fileIn, &dx10Header);
+
+        dx10 = true;
+        switch (dx10Header.dxgiFormat)
+        {
+        case 71 : { pixelFormat = Format::DXT1;        blockSize = 8;  break; }
+        case 74 : { pixelFormat = Format::DXT3;        blockSize = 16; break; }
+        case 77 : { pixelFormat = Format::DXT5;        blockSize = 16; break; }
+        case 80 : { pixelFormat = Format::RGTC1_ATI1N; blockSize = 8;  break; }
+        case 83 : { pixelFormat = Format::RGTC2_ATI2N; blockSize = 16; break; }
+        default :
+            Log::errorF("%s: DDS-DX10 Compression format (%u) not supported!", filePath, dx10Header.dxgiFormat);
+            return false;
+        } // switch
+    }
+    else
+    {
+        dx10 = false;
+        switch (header.pixelFormat.fourCC)
+        {
+        case '1TXD' : { pixelFormat = Format::DXT1; blockSize = 8;  break; }
+        case '3TXD' : { pixelFormat = Format::DXT3; blockSize = 16; break; }
+        case '5TXD' : { pixelFormat = Format::DXT5; blockSize = 16; break; }
+        default :
+            Log::errorF("%s: DDS Compression format (%#x) not supported!", filePath, header.pixelFormat.fourCC);
+            return false;
+        } // switch
+    }
+
+    //
+    // Read in all the precomputed DDS mipmap levels:
+    //
+
+    std::uint32_t w = header.width;
+    std::uint32_t h = header.height;
+    allocateImageStorage(w, h, header.mipMapCount, blockSize, pixelFormat);
+
+    Log::debugF("Load DDS %s: (w:%u, h:%u, mipmaps:%u, blockSize:%u, format:%s, dx10:%c)",
+                filePath, w, h, header.mipMapCount, blockSize, Image::FormatStrings[pixelFormat], (dx10 ? 'y' : 'n'));
+
+    for (std::uint32_t i = 0; (i < header.mipMapCount) && (i < MaxSurfaces); ++i)
+    {
+        // Deduce # of bytes
+        // Close to the higher mipmap levels, w or h may become 0; keep things at 1
+        if (w == 0) { w = 1; }
+        if (h == 0) { h = 1; }
+        const std::size_t numBytes = ((w + 3) / 4) * ((h + 3) / 4) * blockSize;
+
+        if (std::fread(m_surfaces[i].rawData, 1, numBytes, fileIn) != numBytes)
+        {
+            Log::errorF("%s: Failed to read %zu bytes from DDS file! Stopping...", filePath, numBytes);
+            shutdown(); return false;
+        }
+
+        // Next level is half the current size.
+        w /= 2;
+        h /= 2;
+    }
+
+    return true;
+}
+
+void DXTCompressedImage::shutdown()
+{
+    m_format            = Format::None;
+    m_memoryUsageBytes  = 0;
+    m_dxtCompressedData = nullptr;
+    m_surfaces.clear();
+}
+
+void DXTCompressedImage::allocateImageStorage(const std::uint32_t width, const std::uint32_t height,
+                                              const std::uint32_t mipMapCount, const std::uint32_t blockSize,
+                                              const Format pixelFormat)
+{
+    std::uint32_t memoryBytesNeeded = 0;
+    std::uint32_t w = width;
+    std::uint32_t h = height;
+
+    // Find out the total amount of memory we need to allocate:
+    for (std::uint32_t i = 0; (i < mipMapCount) && (i < MaxSurfaces); ++i)
+    {
+        if (w == 0) { w = 1; }
+        if (h == 0) { h = 1; }
+        memoryBytesNeeded += ((w + 3) / 4) * ((h + 3) / 4) * blockSize;
+        w /= 2;
+        h /= 2;
+    }
+
+    // Allocate storage:
+    m_dxtCompressedData.reset(new std::uint8_t[memoryBytesNeeded]);
+    m_memoryUsageBytes = memoryBytesNeeded;
+    m_format = pixelFormat;
+
+    // Set the surfaces to point to offsets inside the compressed data buffer:
+    w = width;
+    h = height;
+    std::uint8_t * nextMipLevelPtr = m_dxtCompressedData.get();
+    for (std::uint32_t i = 0; (i < mipMapCount) && (i < MaxSurfaces); ++i)
+    {
+        if (w == 0) { w = 1; }
+        if (h == 0) { h = 1; }
+        const std::size_t numBytes = ((w + 3) / 4) * ((h + 3) / 4) * blockSize;
+
+        Size2D surfaceDims;
+        surfaceDims.width  = w;
+        surfaceDims.height = h;
+        m_surfaces.push({ nextMipLevelPtr, surfaceDims });
+
+        w /= 2;
+        h /= 2;
+        nextMipLevelPtr += numBytes;
     }
 }
 

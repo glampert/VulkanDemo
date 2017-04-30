@@ -71,7 +71,6 @@ VulkanContext::VulkanContext(const OSWindow & window, const Size2D fbSize, const
     initRenderPass();
     initFramebuffers();
     initSemaphores();
-    cacheFormatProperties();
 
     // Finish the frame/depth buffer layout transitions
     m_mainTextureStagingCmdBuffer.endRecording();
@@ -1072,31 +1071,6 @@ void VulkanContext::createBuffer(const VkDeviceSize sizeBytes, const VkBufferUsa
 
     VKTB_CHECK(vkAllocateMemory(m_device, &allocInfo, m_allocationCallbacks, outBufferMemory));
     VKTB_CHECK(vkBindBufferMemory(m_device, *outBuffer, *outBufferMemory, 0));
-}
-
-void VulkanContext::cacheFormatProperties()
-{
-    for (Image::Format k : m_formatPropsCache.keys())
-    {
-        if (k == Image::Format::None)
-        {
-            m_formatPropsCache[k]      = {};
-            m_imageFormatPropsCache[k] = {};
-            continue;
-        }
-
-        const VkFormat vkImageFormat = Texture::toVkImageFormat(k);
-
-        vkGetPhysicalDeviceFormatProperties(m_gpuPhysDevice, vkImageFormat,
-                                            &m_formatPropsCache[k]);
-
-        // VK_IMAGE_TILING_LINEAR:  Texels are laid out in row-major order (mipmaps are not supported).
-        // VK_IMAGE_TILING_OPTIMAL: Texels are laid out in an implementation defined order for optimal access.
-        vkGetPhysicalDeviceImageFormatProperties(m_gpuPhysDevice, vkImageFormat,
-                                                 VK_IMAGE_TYPE_2D, VK_IMAGE_TILING_OPTIMAL,
-                                                 VK_IMAGE_USAGE_SAMPLED_BIT, 0,
-                                                 &m_imageFormatPropsCache[k]);
-    }
 }
 
 void VulkanContext::logInstanceLayerProperties() const

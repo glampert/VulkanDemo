@@ -76,8 +76,6 @@ public:
     const VkPhysicalDeviceFeatures & deviceFeatures() const;
     const VkPhysicalDeviceProperties & deviceProperties() const;
     const VkPhysicalDeviceMemoryProperties & deviceMemoryProperties() const;
-    const VkFormatProperties & vkFormatPropertiesForImageFormat(Image::Format format) const;
-    const VkImageFormatProperties & vkImageFormatPropertiesForImageFormat(Image::Format format) const;
 
     // Accessors:
     const OSWindow & renderWindow() const;
@@ -228,7 +226,6 @@ private:
     void initRenderPass();
     void initCommandPoolAndBuffers();
     void initSemaphores();
-    void cacheFormatProperties();
 
 private:
 
@@ -290,10 +287,6 @@ private:
     // Information bits about the graphics hardware physical limitations.
     // We only care about the first GPU for now.
     GpuInfo m_gpuInfo;
-
-    // These are queried all the time by Textures, so we cache one for each supported image format.
-    enum_array<Image::Format, VkFormatProperties> m_formatPropsCache;
-    enum_array<Image::Format, VkImageFormatProperties> m_imageFormatPropsCache;
 
     // Layers and extensions available for the VK Instance.
     std::vector<LayerProperties> m_instanceLayerProperties;
@@ -566,16 +559,6 @@ inline VkDevice VulkanContext::deviceHandle() const
 inline const VkPhysicalDeviceMemoryProperties & VulkanContext::deviceMemoryProperties() const
 {
     return m_gpuInfo.memoryProperties;
-}
-
-inline const VkFormatProperties & VulkanContext::vkFormatPropertiesForImageFormat(const Image::Format format) const
-{
-    return m_formatPropsCache[format];
-}
-
-inline const VkImageFormatProperties & VulkanContext::vkImageFormatPropertiesForImageFormat(const Image::Format format) const
-{
-    return m_imageFormatPropsCache[format];
 }
 
 inline const VkPhysicalDeviceProperties & VulkanContext::deviceProperties() const

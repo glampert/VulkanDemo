@@ -163,12 +163,10 @@ bool Texture::load()
         unload();
     }
 
-    str256 errorInfo;
     Image image;
-
-    if (!image.initFromFile(name, &errorInfo))
+    if (!image.initFromFile(name))
     {
-        Log::warningF("Failed to load texture: %s", errorInfo.c_str());
+        Log::warningF("Failed to load texture: %s", name);
         return false;
     }
 

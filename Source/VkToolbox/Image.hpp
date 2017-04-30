@@ -172,6 +172,19 @@ public:
         RGB8,  // 3 bytes per pixel, 3 channels
         RGBA8, // 4 bytes per pixel, 4 channels
 
+        // DXT Compressed formats:
+        // The DXT compressed pixel format consist of a RGBA image, encoded with the S3 compression
+        // algorithm or a variant, usually loaded from DDS files. This image pixel format does not
+        // allow any direct pixel access or pixel ops, since the pixels themselves are compressed into memory.
+        DXT1,
+        DXT3,
+        DXT5,
+
+        // RGTC/ATI Compressed formats:
+        // Red & Green in memory compressed image, ideal for normal maps.
+        RGTC1_ATI1N, // ATI1N is a RED channel only image.
+        RGTC2_ATI2N, // ATI2N is a REG & GREEN, 2 channel image.
+
         // Number of entries in this enum - internal use.
         Count
     };
@@ -199,7 +212,7 @@ public:
     Image(Size2D wh, Format fmt);
     Image(Size2D wh, Color32 fillColor);
     Image(Size2D wh, Format fmt, const void * baseSurface);
-    Image(const char * filePath, str * outOptErrorInfo = nullptr);
+    Image(const char * filePath);
 
     // Movable.
     Image(Image && other);
@@ -257,12 +270,12 @@ public:
     // Will create at least a base surface if the file succeeds to load.
     // Dimensions and pixel format are inferred from the image file.
     // Supports: TGA, JPEG, BMP, PNG and GIF (without animation).
-    bool initFromFile(const char * filePath, str * outOptErrorInfo = nullptr);
+    bool initFromFile(const char * filePath);
 
     // Writes the given image surface to a file on disk. Overwrites any existing
     // file with the same name. The format of the output image file will be inferred
     // from the extension. Supports: TGA, BMP and PNG.
-    bool writeToFile(const char * filePath, int surfaceIndex = 0, str * outOptErrorInfo = nullptr) const;
+    bool writeToFile(const char * filePath, int surfaceIndex = 0) const;
 
     // Dumps all surfaces in this image to files. Used mostly for debugging the mipmapper.
     // Path/directories must already exit. Output file names will be in the format:
@@ -367,6 +380,72 @@ private:
 };
 
 // ========================================================
+// class DXTCompressedImage:
+// ========================================================
+
+// Image stored with DXT/ATI1N/ATI2N compression.
+// This type of image is usually loaded from a DDS file and is only
+// suitable for texturing where hardware decompression is available.
+// The image data remains compressed in main memory and no direct pixel
+// access is provided.
+class DXTCompressedImage final
+{
+public:
+
+    static constexpr int MaxSurfaces = Image::MaxSurfaces;
+    using Format = Image::Format;
+
+    // Creates an invalid image.
+    DXTCompressedImage() = default;
+
+    // Load from a DDS file.
+    DXTCompressedImage(const char * filePath);
+
+    // Movable.
+    DXTCompressedImage(DXTCompressedImage && other);
+    DXTCompressedImage & operator = (DXTCompressedImage && other);
+
+    // Not copyable.
+    DXTCompressedImage(const DXTCompressedImage & other) = delete;
+    DXTCompressedImage & operator = (const DXTCompressedImage & other) = delete;
+
+    // Load from a DDS file.
+    bool initFromFile(const char * filePath);
+    void shutdown();
+
+    // Miscellaneous info queries:
+    bool isInitialized() const;
+    bool isValidAllSurfaces() const;
+    bool isValid() const;
+    bool isMipmapped() const;
+    Format format() const;
+    std::size_t memoryUsageBytes() const;
+    bool isPowerOfTwo(int surfaceIndex = 0) const;
+    const Size2D & size(int surfaceIndex = 0) const;
+
+    // Access the pixel data as an opaque array of bytes (fist surface/level only).
+    // Data is compressed according to the DXT compression flavor of the format.
+    const std::uint8_t * pixelDataBaseSurface() const;
+    std::uint8_t * pixelDataBaseSurface();
+
+    // Surface access:
+    int surfaceCount() const;
+    const ImageSurface & surface(int surfaceIndex) const;
+    ImageSurface & surface(int surfaceIndex);
+
+private:
+
+    void allocateImageStorage(std::uint32_t width, std::uint32_t height,
+                              std::uint32_t mipMapCount, std::uint32_t blockSize,
+                              Format pixelFormat);
+
+    Format m_format = Format::None;
+    std::uint32_t m_memoryUsageBytes = 0;
+    std::unique_ptr<std::uint8_t[]> m_dxtCompressedData;
+    FixedSizeArray<ImageSurface, MaxSurfaces> m_surfaces;
+};
+
+// ========================================================
 // Image inline methods:
 // ========================================================
 
@@ -385,9 +464,9 @@ inline Image::Image(const Size2D wh, const Format fmt, const void * const baseSu
     initWithExternalData(wh, fmt, baseSurface);
 }
 
-inline Image::Image(const char * const filePath, str * outOptErrorInfo)
+inline Image::Image(const char * const filePath)
 {
-    initFromFile(filePath, outOptErrorInfo);
+    initFromFile(filePath);
 }
 
 inline Image::Image(Image && other)
@@ -552,6 +631,113 @@ inline void Image::forEveryPixel(Func && fn, const int surfaceIndex)
     {
         if (!fn(surfDataPtr)) { break; }
     }
+}
+
+// ========================================================
+// DXTCompressedImage inline methods:
+// ========================================================
+
+inline DXTCompressedImage::DXTCompressedImage(const char * const filePath)
+{
+    initFromFile(filePath);
+}
+
+inline DXTCompressedImage::DXTCompressedImage(DXTCompressedImage && other)
+    : m_format{ other.m_format }
+    , m_memoryUsageBytes{ other.m_memoryUsageBytes }
+    , m_dxtCompressedData{ std::move(other.m_dxtCompressedData) }
+    , m_surfaces{ std::move(other.m_surfaces) }
+{
+    other.shutdown();
+}
+
+inline DXTCompressedImage & DXTCompressedImage::operator = (DXTCompressedImage && other)
+{
+    m_format            = other.m_format;
+    m_memoryUsageBytes  = other.m_memoryUsageBytes;
+    m_dxtCompressedData = std::move(other.m_dxtCompressedData);
+    m_surfaces          = std::move(other.m_surfaces);
+
+    other.shutdown();
+    return *this;
+}
+
+inline bool DXTCompressedImage::isInitialized() const
+{
+    return (m_dxtCompressedData != nullptr);
+}
+
+inline bool DXTCompressedImage::isValidAllSurfaces() const
+{
+    if (!isValid())
+    {
+        return false;
+    }
+    for (const ImageSurface & surf : m_surfaces)
+    {
+        if (!surf.isValid())
+        {
+            return false;
+        }
+    }
+    return true;
+}
+
+inline bool DXTCompressedImage::isValid() const
+{
+    return (m_dxtCompressedData != nullptr &&
+            m_format != Format::None &&
+            m_surfaces.size() != 0);
+}
+
+inline bool DXTCompressedImage::isMipmapped() const
+{
+    return (m_surfaces.size() > 1);
+}
+
+inline DXTCompressedImage::Format DXTCompressedImage::format() const
+{
+    return m_format;
+}
+
+inline std::size_t DXTCompressedImage::memoryUsageBytes() const
+{
+    return m_memoryUsageBytes;
+}
+
+inline bool DXTCompressedImage::isPowerOfTwo(const int surfaceIndex) const
+{
+    return m_surfaces[surfaceIndex].isPowerOfTwo();
+}
+
+inline const Size2D & DXTCompressedImage::size(const int surfaceIndex) const
+{
+    return m_surfaces[surfaceIndex].size;
+}
+
+inline const std::uint8_t * DXTCompressedImage::pixelDataBaseSurface() const
+{
+    return m_dxtCompressedData.get();
+}
+
+inline std::uint8_t * DXTCompressedImage::pixelDataBaseSurface()
+{
+    return m_dxtCompressedData.get();
+}
+
+inline int DXTCompressedImage::surfaceCount() const
+{
+    return m_surfaces.size();
+}
+
+inline const ImageSurface & DXTCompressedImage::surface(const int surfaceIndex) const
+{
+    return m_surfaces[surfaceIndex];
+}
+
+inline ImageSurface & DXTCompressedImage::surface(const int surfaceIndex)
+{
+    return m_surfaces[surfaceIndex];
 }
 
 // ========================================================

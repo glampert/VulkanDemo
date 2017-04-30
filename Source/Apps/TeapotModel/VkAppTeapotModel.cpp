@@ -237,10 +237,7 @@ void VkAppTeapotModel::initTexture()
 
 void VkAppTeapotModel::initVertexBuffer()
 {
-    //#define MESH_FILE_AND_SCALE  VKTB_MESH_MODELS_PATH "Cube/cube.obj", 5.0f
-    #define MESH_FILE_AND_SCALE  VKTB_MESH_MODELS_PATH "Teapot/teapot.obj", 0.1f
-
-    m_mesh.initFromFile(MESH_FILE_AND_SCALE);
+    m_mesh.initFromFile(VKTB_MESH_MODELS_PATH "Teapot/teapot.obj", 0.1f);
 
     m_vertexBuffer.initialize(m_mesh.vertexCount());
     m_indexBuffer.initialize(m_mesh.indexCount());
@@ -255,8 +252,6 @@ void VkAppTeapotModel::initVertexBuffer()
     {
         assert(idx < MeshIndex(m_mesh.vertexCount()));
     }
-
-    #undef MESH_FILE_AND_SCALE
 }
 
 void VkAppTeapotModel::updateBuffers(CommandBuffer & cmdBuff)
