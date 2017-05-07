@@ -15,9 +15,6 @@ namespace VkToolbox
 
 #define VKTB_TEXTURES_PATH "Assets/Textures/"
 
-class Image;
-class CommandBuffer;
-
 // ========================================================
 // class Sampler:
 // ========================================================
@@ -105,15 +102,18 @@ public:
 
     // Load the texture from already in-memory Image instance.
     bool loadFromImageInMemory(const Image & image);
+    bool loadFromImageInMemory(const DXTCompressedImage & image);
 
     // This can be safely called after the texture staging buffer of
     // the context has been submitted and waited for completion.
-    void releaseStagingImage();
+    void releaseStagingResources();
 
 private:
 
     void clear();
-    void initVkTextureData(const Image & image);
+    void initVkTextureData(const ImageSurface * surfaces, int surfaceCount,
+                           VkFormat imageFormat, Size2D imageSize,
+                           std::size_t memorySizeBytes);
 
     const VulkanContext * m_vkContext;
     StrId<str> m_resId;
@@ -122,8 +122,8 @@ private:
     VkImageView m_imageViewHandle;
     VkDeviceMemory m_imageMemHandle;
 
-    VkImage m_stagingImageHandle;
-    VkDeviceMemory m_stagingImageMemHandle;
+    VkBuffer m_stagingBufferHandle;
+    VkDeviceMemory m_stagingBufferMemHandle;
 
     Size2D m_imageSize;
     VkFormat m_imageFormat;

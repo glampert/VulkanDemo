@@ -262,8 +262,8 @@ void VkAppTexturedCubes::initTextures()
     cmdBuff.reset();
 
     // Done with the staging data.
-    m_texture0.releaseStagingImage();
-    m_texture1.releaseStagingImage();
+    m_texture0.releaseStagingResources();
+    m_texture1.releaseStagingResources();
 }
 
 void VkAppTexturedCubes::updateBuffers(CommandBuffer & cmdBuff)

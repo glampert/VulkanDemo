@@ -63,7 +63,7 @@ void Image::initWithSize(const Size2D wh, const Format fmt)
     }
     m_rawDataBaseSurface.reset(pixels);
 
-    ImageSurface baseSurface{ pixels, wh };
+    ImageSurface baseSurface{ pixels, m_memoryUsageBytes, wh };
     m_surfaces.push(baseSurface);
 }
 
@@ -172,7 +172,7 @@ bool Image::initFromFile(const char * const filePath)
     m_memoryUsageBytes = (width * height * bytesPerPixel());
     m_rawDataBaseSurface.reset(newImageData);
 
-    ImageSurface baseSurface{ newImageData, { width, height } };
+    ImageSurface baseSurface{ newImageData, m_memoryUsageBytes, { width, height } };
     m_surfaces.push(baseSurface);
 
     if (!VkToolbox::isPowerOfTwo(width) || !VkToolbox::isPowerOfTwo(height))
@@ -425,13 +425,6 @@ void Image::generateMipmapSurfaces()
         return;
     }
 
-    // All sub-surfaces/mipmaps will be allocated in a contiguous
-    // block of memory. We align the start of each portion belonging
-    // to a surface to this many bytes.
-    // 16 is the usual alignment for 'malloc' implementations and also suitable
-    // for SSE/SIMD instructions, even though we don't currently use them directly.
-    constexpr int SurfBoundaryAlignment = 16;
-
     // Initial image is the base surface (mipmap level = 0).
     // We always use the initial image to generate all mipmaps
     // to avoid propagating errors from the downsampling.
@@ -451,7 +444,7 @@ void Image::generateMipmapSurfaces()
         targetWidth  = std::max(1, targetWidth  / 2);
         targetHeight = std::max(1, targetHeight / 2);
 
-        mipmapBytes += alignSize(targetWidth * targetHeight * bytesPerPixel(), SurfBoundaryAlignment);
+        mipmapBytes += targetWidth * targetHeight * bytesPerPixel();
         mipmapCount++;
 
         if (targetWidth == 1 && targetHeight == 1)
@@ -501,6 +494,7 @@ void Image::generateMipmapSurfaces()
         );
 
         m_surfaces[mipmapCount].rawData     = mipDataPtr;
+        m_surfaces[mipmapCount].sizeBytes   = targetWidth * targetHeight * bytesPerPixel();
         m_surfaces[mipmapCount].size.width  = targetWidth;
         m_surfaces[mipmapCount].size.height = targetHeight;
         mipmapCount++;
@@ -511,7 +505,6 @@ void Image::generateMipmapSurfaces()
         }
 
         mipDataPtr += targetWidth * targetHeight * bytesPerPixel();
-        mipDataPtr  = alignPtr(mipDataPtr, SurfBoundaryAlignment);
     }
 }
 
@@ -988,12 +981,12 @@ void DXTCompressedImage::allocateImageStorage(const std::uint32_t width, const s
     {
         if (w == 0) { w = 1; }
         if (h == 0) { h = 1; }
-        const std::size_t numBytes = ((w + 3) / 4) * ((h + 3) / 4) * blockSize;
+        const std::uint32_t numBytes = ((w + 3) / 4) * ((h + 3) / 4) * blockSize;
 
         Size2D surfaceDims;
         surfaceDims.width  = w;
         surfaceDims.height = h;
-        m_surfaces.push({ nextMipLevelPtr, surfaceDims });
+        m_surfaces.push({ nextMipLevelPtr, numBytes, surfaceDims });
 
         w /= 2;
         h /= 2;

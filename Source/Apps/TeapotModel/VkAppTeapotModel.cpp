@@ -223,16 +223,15 @@ void VkAppTeapotModel::initTexture()
 
     const auto & cmdBuff = context().mainTextureStagingCmdBuffer();
     cmdBuff.beginRecording();
-    {
-        m_texture.setGenerateMipmapsOnLoad(false); // Not using mipmaps this time.
-        m_texture.load();
-    }
+
+    m_texture.load();
+
     cmdBuff.endRecording();
     cmdBuff.submitAndWaitComplete(context().graphisQueue());
     cmdBuff.reset();
 
     // Done with the staging data.
-    m_texture.releaseStagingImage();
+    m_texture.releaseStagingResources();
 }
 
 void VkAppTeapotModel::initVertexBuffer()

@@ -1046,7 +1046,7 @@ void VulkanContext::copyBuffer(const CommandBuffer & cmdBuff, VkBuffer srcBuffer
 
 void VulkanContext::createBuffer(const VkDeviceSize sizeBytes, const VkBufferUsageFlags usage,
                                  const VkMemoryPropertyFlags memoryProperties, VkBuffer * outBuffer,
-                                 VkDeviceMemory * outBufferMemory) const
+                                 VkDeviceMemory * outBufferMemory, VkMemoryRequirements * outOptMemReqs) const
 {
     assert(sizeBytes != 0);
     assert(outBuffer != nullptr && outBufferMemory != nullptr);
@@ -1071,6 +1071,11 @@ void VulkanContext::createBuffer(const VkDeviceSize sizeBytes, const VkBufferUsa
 
     VKTB_CHECK(vkAllocateMemory(m_device, &allocInfo, m_allocationCallbacks, outBufferMemory));
     VKTB_CHECK(vkBindBufferMemory(m_device, *outBuffer, *outBufferMemory, 0));
+
+    if (outOptMemReqs != nullptr)
+    {
+        *outOptMemReqs = memRequirements;
+    }
 }
 
 void VulkanContext::logInstanceLayerProperties() const

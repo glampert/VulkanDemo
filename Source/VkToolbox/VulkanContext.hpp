@@ -167,7 +167,7 @@ public:
                     VkDeviceSize srcOffset = 0, VkDeviceSize dstOffset = 0) const;
 
     void createBuffer(VkDeviceSize sizeBytes, VkBufferUsageFlags usage, VkMemoryPropertyFlags memoryProperties,
-                      VkBuffer * outBuffer, VkDeviceMemory * outBufferMemory) const;
+                      VkBuffer * outBuffer, VkDeviceMemory * outBufferMemory, VkMemoryRequirements * outOptMemReqs = nullptr) const;
 
 private:
 

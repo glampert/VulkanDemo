@@ -120,12 +120,15 @@ struct ImageSurface final
     // the parent Image. This points to the Image that owns the surface.
     std::uint8_t * rawData = nullptr;
 
+    // Total size of this surface in bytes (possibly including padding).
+    std::uint32_t sizeBytes = 0;
+
     // Width(x) and height(y) of this surface.
     Size2D size = {0,0};
 
     ImageSurface() = default;
-    ImageSurface(std::uint8_t * data, Size2D wh)
-        : rawData{ data }, size{ wh }
+    ImageSurface(std::uint8_t * data, std::uint32_t sb, Size2D wh)
+        : rawData{ data }, sizeBytes{ sb }, size{ wh }
     { }
 
     bool isValid() const
@@ -175,7 +178,8 @@ public:
         // DXT Compressed formats:
         // The DXT compressed pixel format consist of a RGBA image, encoded with the S3 compression
         // algorithm or a variant, usually loaded from DDS files. This image pixel format does not
-        // allow any direct pixel access or pixel ops, since the pixels themselves are compressed into memory.
+        // allow any direct pixel access or pixel ops, since the pixels themselves are compressed in memory.
+        // See also: http://vulkan-spec-chunked.ahcox.com/apbs01.html and https://en.wikipedia.org/wiki/S3_Texture_Compression
         DXT1,
         DXT3,
         DXT5,
@@ -243,6 +247,7 @@ public:
 
     // Surface access:
     int surfaceCount() const;
+    const ImageSurface * surfaces() const;
     const ImageSurface & surface(int surfaceIndex) const;
     ImageSurface & surface(int surfaceIndex);
 
@@ -430,6 +435,7 @@ public:
 
     // Surface access:
     int surfaceCount() const;
+    const ImageSurface * surfaces() const;
     const ImageSurface & surface(int surfaceIndex) const;
     ImageSurface & surface(int surfaceIndex);
 
@@ -581,6 +587,11 @@ inline std::uint8_t * Image::pixelDataBaseSurface()
     return m_rawDataBaseSurface.get();
 }
 
+inline const ImageSurface * Image::surfaces() const
+{
+    return m_surfaces.data();
+}
+
 inline const ImageSurface & Image::surface(const int surfaceIndex) const
 {
     return m_surfaces[surfaceIndex];
@@ -728,6 +739,11 @@ inline std::uint8_t * DXTCompressedImage::pixelDataBaseSurface()
 inline int DXTCompressedImage::surfaceCount() const
 {
     return m_surfaces.size();
+}
+
+inline const ImageSurface * DXTCompressedImage::surfaces() const
+{
+    return m_surfaces.data();
 }
 
 inline const ImageSurface & DXTCompressedImage::surface(const int surfaceIndex) const
