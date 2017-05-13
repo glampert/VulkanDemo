@@ -34,6 +34,15 @@ struct Size2D final
     int height;
 };
 
+inline bool operator == (const Size2D & a, const Size2D & b)
+{
+    return (a.width == b.width && a.height == b.height);
+}
+inline bool operator != (const Size2D & a, const Size2D & b)
+{
+    return !(a == b);
+}
+
 // Width, height and depth triplet.
 struct Size3D final
 {
@@ -41,6 +50,15 @@ struct Size3D final
     int height;
     int depth;
 };
+
+inline bool operator == (const Size3D & a, const Size3D & b)
+{
+    return (a.width == b.width && a.height == b.height && a.depth == b.depth);
+}
+inline bool operator != (const Size3D & a, const Size3D & b)
+{
+    return !(a == b);
+}
 
 namespace CT
 {

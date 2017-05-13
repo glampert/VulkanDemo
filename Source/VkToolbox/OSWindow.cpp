@@ -217,11 +217,8 @@ void OSWindow::runEventLoop()
         MouseState::wheelDelta = 0;
 
         // Poll system events:
-        while (PeekMessage(&msg, reinterpret_cast<HWND>(windowHandle()), 0, 0, PM_REMOVE))
+        while (PeekMessage(&msg, nullptr, 0, 0, PM_REMOVE))
         {
-            TranslateMessage(&msg);
-            DispatchMessage(&msg);
-
             if (msg.message == WM_QUIT)
             {
                 if (onClose)
@@ -238,6 +235,11 @@ void OSWindow::runEventLoop()
                     m_stopEventLoop = true;
                     break;
                 }
+            }
+            else
+            {
+                TranslateMessage(&msg);
+                DispatchMessage(&msg);
             }
         }
     }

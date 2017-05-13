@@ -259,7 +259,7 @@ void VulkanContext::initDevice()
     deviceCreateInfo.pQueueCreateInfos       = &queueCreateInfo;
     deviceCreateInfo.enabledExtensionCount   = deviceExtensionCount;
     deviceCreateInfo.ppEnabledExtensionNames = deviceExtensionNames;
-    deviceCreateInfo.pEnabledFeatures        = nullptr;
+    deviceCreateInfo.pEnabledFeatures        = &m_gpuInfo.features;
 
     VKTB_CHECK(vkCreateDevice(m_gpuPhysDevice, &deviceCreateInfo, m_allocationCallbacks, &m_device));
     assert(m_device != VK_NULL_HANDLE);
@@ -915,7 +915,8 @@ std::uint32_t VulkanContext::memoryTypeFromProperties(const std::uint32_t typeBi
 
 void VulkanContext::changeImageLayout(const CommandBuffer & cmdBuff, VkImage image, const VkImageAspectFlags aspectMask,
                                       const VkImageLayout oldImageLayout, const VkImageLayout newImageLayout,
-                                      const int baseMipLevel, const int mipLevelCount) const
+                                      const int baseMipLevel, const int mipLevelCount,
+                                      const int baseLayer, const int layerCount) const
 {
     assert(image != VK_NULL_HANDLE);
     assert(cmdBuff.isInRecordingState());
@@ -933,8 +934,8 @@ void VulkanContext::changeImageLayout(const CommandBuffer & cmdBuff, VkImage ima
     imageMemBarrier.subresourceRange.aspectMask     = aspectMask;
     imageMemBarrier.subresourceRange.baseMipLevel   = baseMipLevel;
     imageMemBarrier.subresourceRange.levelCount     = mipLevelCount;
-    imageMemBarrier.subresourceRange.baseArrayLayer = 0;
-    imageMemBarrier.subresourceRange.layerCount     = 1;
+    imageMemBarrier.subresourceRange.baseArrayLayer = baseLayer;
+    imageMemBarrier.subresourceRange.layerCount     = layerCount;
 
     if (oldImageLayout == VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL)
     {

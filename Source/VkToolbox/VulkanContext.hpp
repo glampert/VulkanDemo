@@ -154,7 +154,8 @@ public:
 
     void changeImageLayout(const CommandBuffer & cmdBuff, VkImage image, VkImageAspectFlags aspectMask,
                            VkImageLayout oldImageLayout, VkImageLayout newImageLayout,
-                           int baseMipLevel = 0, int mipLevelCount = 1) const;
+                           int baseMipLevel = 0, int mipLevelCount = 1,
+                           int baseLayer = 0, int layerCount = 1) const;
 
     void copyImage(const CommandBuffer & cmdBuff, VkImage srcImage,
                    VkImage dstImage, Size2D size) const;
@@ -167,7 +168,8 @@ public:
                     VkDeviceSize srcOffset = 0, VkDeviceSize dstOffset = 0) const;
 
     void createBuffer(VkDeviceSize sizeBytes, VkBufferUsageFlags usage, VkMemoryPropertyFlags memoryProperties,
-                      VkBuffer * outBuffer, VkDeviceMemory * outBufferMemory, VkMemoryRequirements * outOptMemReqs = nullptr) const;
+                      VkBuffer * outBuffer, VkDeviceMemory * outBufferMemory,
+                      VkMemoryRequirements * outOptMemReqs = nullptr) const;
 
 private:
 

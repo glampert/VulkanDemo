@@ -32,6 +32,9 @@
     <Filter Include="Source Files\Apps\TeapotModel">
       <UniqueIdentifier>{c3b7c5d7-b6fb-4773-b490-dea2bf200117}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Source Files\Apps\MipMapsAndLayers">
+      <UniqueIdentifier>{fa67e9dd-e2df-42be-81c3-a5bc9c1bcc8d}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\Source\VkToolbox\GlslShader.cpp">
@@ -93,6 +96,9 @@
     </ClCompile>
     <ClCompile Include="..\Source\VkToolbox\Input.cpp">
       <Filter>Source Files\VkToolbox</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Source\Apps\MipMapsAndLayers\VkAppMipMapsAndLayers.cpp">
+      <Filter>Source Files\Apps\MipMapsAndLayers</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -210,6 +216,9 @@
       <Filter>Source Files\Shaders</Filter>
     </None>
     <None Include="..\Source\Shaders\TexturedCubes.glsl">
+      <Filter>Source Files\Shaders</Filter>
+    </None>
+    <None Include="..\Source\Shaders\MipsLayersTest.glsl">
       <Filter>Source Files\Shaders</Filter>
     </None>
   </ItemGroup>

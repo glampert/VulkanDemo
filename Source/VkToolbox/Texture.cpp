@@ -85,6 +85,15 @@ const VkSamplerCreateInfo & Sampler::defaults()
 // class Texture:
 // ========================================================
 
+const char * const Texture::LayerSuffixes[] = {
+    "diff",
+    "ddn",
+    "spec",
+};
+static_assert(arrayLength(Texture::LayerSuffixes) == Texture::MaxLayers, "Keep in sync with the enum!");
+
+// ========================================================
+
 Texture::Texture(const VulkanContext & vkContext, StrId<str> && id)
     : m_vkContext{ &vkContext }
     , m_resId{ std::move(id) }
@@ -96,7 +105,8 @@ Texture::Texture(const VulkanContext & vkContext, StrId<str> && id)
     , m_imageSize{ 0,0 }
     , m_imageFormat{ VK_FORMAT_UNDEFINED }
     , m_imageViewType{ VK_IMAGE_VIEW_TYPE_2D }
-    , m_imageMipmaps{ 0 }
+    , m_imageMipmapCount{ 0 }
+    , m_imageLayerCount{ 0 }
     , m_dontGenMipmaps{ false }
 {
 }
@@ -112,7 +122,8 @@ Texture::Texture(Texture && other)
     , m_imageSize{ other.m_imageSize }
     , m_imageFormat{ other.m_imageFormat }
     , m_imageViewType{ other.m_imageViewType }
-    , m_imageMipmaps{ other.m_imageMipmaps }
+    , m_imageMipmapCount{ other.m_imageMipmapCount }
+    , m_imageLayerCount{ other.m_imageLayerCount }
     , m_dontGenMipmaps{ other.m_dontGenMipmaps }
 {
     other.clear();
@@ -132,11 +143,33 @@ Texture & Texture::operator = (Texture && other)
     m_imageSize              = other.m_imageSize;
     m_imageFormat            = other.m_imageFormat;
     m_imageViewType          = other.m_imageViewType;
-    m_imageMipmaps           = other.m_imageMipmaps;
+    m_imageMipmapCount       = other.m_imageMipmapCount;
+    m_imageLayerCount        = other.m_imageLayerCount;
     m_dontGenMipmaps         = other.m_dontGenMipmaps;
 
     other.clear();
     return *this;
+}
+
+bool Texture::isArrayTextureName(const str_ref & name)
+{
+    static const char * ArrayTexPrefix = "a_";
+
+    int lastSlash = name.last_index_of('/');
+    if (lastSlash == -1)
+    {
+        lastSlash = name.last_index_of('\\'); // Windows paths
+    }
+
+    if (lastSlash != -1) // With path
+    {
+        const str_ref fileOnly{ name, lastSlash + 1 };
+        return fileOnly.starts_with(ArrayTexPrefix);
+    }
+    else // Filename only
+    {
+        return name.starts_with(ArrayTexPrefix);
+    }
 }
 
 bool Texture::load()
@@ -147,19 +180,26 @@ bool Texture::load()
         return false;
     }
 
-    const char * const name = resourceId().c_str();
-    if (!probeFile(name))
+    const str_ref name{ resourceId().c_str() };
+    if (isArrayTextureName(name))
     {
-        Log::warningF("Image file '%s' does not exist! Can't load texture from it.", name);
+        // Multiple textures combined into an array texture
+        return loadAsArrayTexture();
+    }
+
+    // Single texture:
+    if (!probeFile(name.c_str()))
+    {
+        Log::warningF("Image file '%s' does not exist! Can't load texture from it.", name.c_str());
         return false;
     }
 
-    if (str_ref{ name }.ends_with(".dds"))
+    if (name.ends_with(".dds"))
     {
         DXTCompressedImage compressedImage;
-        if (!compressedImage.initFromFile(name))
+        if (!compressedImage.initFromFile(name.c_str()))
         {
-            Log::warningF("Failed to load DDS texture: %s", name);
+            Log::warningF("Failed to load DDS texture: %s", name.c_str());
             return false;
         }
 
@@ -168,9 +208,9 @@ bool Texture::load()
     else // Default loader from PNG/JPEG/etc:
     {
         Image uncompressedImage;
-        if (!uncompressedImage.initFromFile(name))
+        if (!uncompressedImage.initFromFile(name.c_str()))
         {
-            Log::warningF("Failed to load texture: %s", name);
+            Log::warningF("Failed to load texture: %s", name.c_str());
             return false;
         }
 
@@ -184,30 +224,53 @@ bool Texture::load()
     }
 }
 
-bool Texture::loadFromImageInMemory(const Image & image)
+bool Texture::loadAsArrayTexture()
 {
-    if (isShutdown() || !image.isValid())
-    {
-        Log::warningF("Texture/Image already shutdown and cannot be loaded!");
-        return false;
-    }
-    initVkTextureData(image.surfaces(), image.surfaceCount(),
-                      toVkImageFormat(image.format()), image.size(),
-                      image.memoryUsageBytes());
-    return true;
-}
+    str256 texName{ resourceId().name };
+    str256 layerName;
 
-bool Texture::loadFromImageInMemory(const DXTCompressedImage & image)
-{
-    if (isShutdown() || !image.isValid())
+    if (texName.ends_with(".dds"))
     {
-        Log::warningF("Texture/Image already shutdown and cannot be loaded!");
-        return false;
+        texName.truncate(texName.last_index_of('.')); // Get rid of the extension
+
+        DXTCompressedImage compressedImages[MaxLayers];
+        for (int l = 0; l < MaxLayers; ++l)
+        {
+            layerName.setf("%s_%s.dds", texName.c_str(), LayerSuffixes[l]);
+            if (!compressedImages[l].initFromFile(layerName.c_str()))
+            {
+                Log::warningF("Failed to load DDS texture: %s", layerName.c_str());
+                return false;
+            }
+        }
+
+        return loadAsArrayTextureFromImagesInMemory(compressedImages, MaxLayers);
     }
-    initVkTextureData(image.surfaces(), image.surfaceCount(),
-                      toVkImageFormat(image.format()), image.size(),
-                      image.memoryUsageBytes());
-    return true;
+    else // Decompressed PNG/JPEG/etc path:
+    {
+        const int extIdx = texName.last_index_of('.');
+        const str32 ext{ texName, extIdx, texName.length() - extIdx };
+        texName.truncate(extIdx); // Get rid of the extension
+
+        Image uncompressedImages[MaxLayers];
+        for (int l = 0; l < MaxLayers; ++l)
+        {
+            layerName.setf("%s_%s%s", texName.c_str(), LayerSuffixes[l], ext.c_str());
+            if (!uncompressedImages[l].initFromFile(layerName.c_str()))
+            {
+                Log::warningF("Failed to load texture: %s", layerName.c_str());
+                return false;
+            }
+
+            // If we didn't already do so in Image::initFromFile...
+            if (generateMipmapsOnLoad() && !uncompressedImages[l].isMipmapped())
+            {
+                uncompressedImages[l].generateMipmapSurfaces();
+            }
+        }
+
+        return loadAsArrayTextureFromImagesInMemory(uncompressedImages, MaxLayers);
+    }
 }
 
 void Texture::unload()
@@ -272,8 +335,8 @@ void Texture::clear()
     m_stagingBufferMemHandle = VK_NULL_HANDLE;
 }
 
-void Texture::initVkTextureData(const ImageSurface * const surfaces, const int surfaceCount,
-                                const VkFormat imageFormat, const Size2D imageSize,
+void Texture::initVkTextureData(const ImageSurface * const * surfaces, const int surfaceCount,
+                                const int layerCount, const VkFormat imageFormat, const Size2D imageSize,
                                 const std::size_t memorySizeBytes)
 {
     // We load the image in-place to avoid keeping two copies of the memory
@@ -308,11 +371,14 @@ void Texture::initVkTextureData(const ImageSurface * const surfaces, const int s
     VKTB_CHECK(vkMapMemory(device, m_stagingBufferMemHandle, 0, memReqs.size, 0, &pMappedMem));
     {
         auto * destPixels = static_cast<std::uint8_t *>(pMappedMem);
-        for (int s = 0; s < surfaceCount; ++s)
+        for (int l = 0; l < layerCount; ++l)
         {
-            const ImageSurface & surface = surfaces[s];
-            std::memcpy(destPixels, surface.rawData, surface.sizeBytes);
-            destPixels += surface.sizeBytes;
+            for (int s = 0; s < surfaceCount; ++s)
+            {
+                const ImageSurface & surface = surfaces[l][s];
+                std::memcpy(destPixels, surface.rawData, surface.sizeBytes);
+                destPixels += surface.sizeBytes;
+            }
         }
     }
     vkUnmapMemory(device, m_stagingBufferMemHandle);
@@ -320,21 +386,25 @@ void Texture::initVkTextureData(const ImageSurface * const surfaces, const int s
     //
     // Setup buffer copy regions for each mip level:
     //
-    std::uint32_t mipOffset = 0;
-    FixedSizeArray<VkBufferImageCopy, Image::MaxSurfaces> bufferCopyRegions;
-    for (int s = 0; s < surfaceCount; ++s)
+    VkDeviceSize bufferOffset = 0;
+    FixedSizeArray<VkBufferImageCopy, MaxLayers * Image::MaxSurfaces> bufferCopyRegions;
+    for (int l = 0; l < layerCount; ++l)
     {
-        VkBufferImageCopy bufferCopyRegion               = {};
-        bufferCopyRegion.imageSubresource.aspectMask     = VK_IMAGE_ASPECT_COLOR_BIT;
-        bufferCopyRegion.imageSubresource.mipLevel       = s;
-        bufferCopyRegion.imageSubresource.baseArrayLayer = 0;
-        bufferCopyRegion.imageSubresource.layerCount     = 1;
-        bufferCopyRegion.imageExtent.width               = surfaces[s].size.width;
-        bufferCopyRegion.imageExtent.height              = surfaces[s].size.height;
-        bufferCopyRegion.imageExtent.depth               = 1;
-        bufferCopyRegion.bufferOffset                    = mipOffset;
-        bufferCopyRegions.push(bufferCopyRegion);
-        mipOffset += surfaces[s].sizeBytes;
+        for (int s = 0; s < surfaceCount; ++s)
+        {
+            VkBufferImageCopy bufferCopyRegion               = {};
+            bufferCopyRegion.imageSubresource.aspectMask     = VK_IMAGE_ASPECT_COLOR_BIT;
+            bufferCopyRegion.imageSubresource.mipLevel       = s;
+            bufferCopyRegion.imageSubresource.baseArrayLayer = l;
+            bufferCopyRegion.imageSubresource.layerCount     = 1;
+            bufferCopyRegion.imageExtent.width               = surfaces[l][s].size.width;
+            bufferCopyRegion.imageExtent.height              = surfaces[l][s].size.height;
+            bufferCopyRegion.imageExtent.depth               = 1;
+            bufferCopyRegion.bufferOffset                    = bufferOffset;
+
+            bufferCopyRegions.push(bufferCopyRegion);
+            bufferOffset += surfaces[l][s].sizeBytes;
+        }
     }
 
     //
@@ -350,7 +420,7 @@ void Texture::initVkTextureData(const ImageSurface * const surfaces, const int s
     imageInfo.extent.height         = imageSize.height;
     imageInfo.extent.depth          = 1;
     imageInfo.mipLevels             = surfaceCount;
-    imageInfo.arrayLayers           = 1;
+    imageInfo.arrayLayers           = layerCount;
     imageInfo.samples               = VK_SAMPLE_COUNT_1_BIT;
     imageInfo.tiling                = VK_IMAGE_TILING_OPTIMAL;
     imageInfo.usage                 = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
@@ -366,7 +436,7 @@ void Texture::initVkTextureData(const ImageSurface * const surfaces, const int s
                                    VK_IMAGE_ASPECT_COLOR_BIT,
                                    VK_IMAGE_LAYOUT_UNDEFINED,
                                    VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                                   0, surfaceCount);
+                                   0, surfaceCount, 0, layerCount);
 
     // Copy mip levels from staging buffer:
     vkCmdCopyBufferToImage(cmdBuff, m_stagingBufferHandle,
@@ -378,7 +448,7 @@ void Texture::initVkTextureData(const ImageSurface * const surfaces, const int s
                                    VK_IMAGE_ASPECT_COLOR_BIT,
                                    VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                                    VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                                   0, surfaceCount);
+                                   0, surfaceCount, 0, layerCount);
 
     //
     // Create the image view for our final color texture:
@@ -388,7 +458,7 @@ void Texture::initVkTextureData(const ImageSurface * const surfaces, const int s
     viewCreateInfo.pNext                           = nullptr;
     viewCreateInfo.flags                           = 0;
     viewCreateInfo.image                           = m_imageHandle;
-    viewCreateInfo.viewType                        = VK_IMAGE_VIEW_TYPE_2D;
+    viewCreateInfo.viewType                        = (layerCount > 1 ? VK_IMAGE_VIEW_TYPE_2D_ARRAY : VK_IMAGE_VIEW_TYPE_2D);
     viewCreateInfo.format                          = imageFormat;
     viewCreateInfo.components.r                    = VK_COMPONENT_SWIZZLE_R;
     viewCreateInfo.components.g                    = VK_COMPONENT_SWIZZLE_G;
@@ -398,16 +468,17 @@ void Texture::initVkTextureData(const ImageSurface * const surfaces, const int s
     viewCreateInfo.subresourceRange.baseMipLevel   = 0;
     viewCreateInfo.subresourceRange.levelCount     = surfaceCount;
     viewCreateInfo.subresourceRange.baseArrayLayer = 0;
-    viewCreateInfo.subresourceRange.layerCount     = 1;
+    viewCreateInfo.subresourceRange.layerCount     = layerCount;
     VKTB_CHECK(vkCreateImageView(device, &viewCreateInfo, m_vkContext->allocationCallbacks(), &m_imageViewHandle));
 
     //
     // Set the new member states and we are done:
     //
-    m_imageSize     = imageSize;
-    m_imageFormat   = imageFormat;
-    m_imageMipmaps  = surfaceCount;
-    m_imageViewType = VK_IMAGE_VIEW_TYPE_2D;
+    m_imageSize        = imageSize;
+    m_imageFormat      = imageFormat;
+    m_imageMipmapCount = narrowCast<std::uint16_t>(surfaceCount);
+    m_imageLayerCount  = narrowCast<std::uint16_t>(layerCount);
+    m_imageViewType    = (layerCount > 1 ? VK_IMAGE_VIEW_TYPE_2D_ARRAY : VK_IMAGE_VIEW_TYPE_2D);
 }
 
 VkFormat Texture::toVkImageFormat(const Image::Format format)

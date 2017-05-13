@@ -62,6 +62,17 @@ class Texture final
 {
 public:
 
+    enum LayerIndex
+    {
+        DiffuseLayer,
+        NormalLayer,
+        SpecularLayer,
+
+        // Number of entries in the enum - internal use.
+        MaxLayers
+    };
+    static const char * const LayerSuffixes[];
+
     // Static initialization and shutdown for internal shared state.
     static void initClass();
     static void shutdownClass();
@@ -90,6 +101,10 @@ public:
 
     bool isMipmapped() const;
     int mipmapCount() const;
+
+    bool isArrayTexture() const;
+    int layerCount() const;
+
     const Size2D size() const;
     VkFormat format() const;
     VkImageViewType imageViewType() const;
@@ -100,9 +115,26 @@ public:
     void setGenerateMipmapsOnLoad(bool trueIfShouldGenMipmaps);
     bool generateMipmapsOnLoad() const;
 
-    // Load the texture from already in-memory Image instance.
-    bool loadFromImageInMemory(const Image & image);
-    bool loadFromImageInMemory(const DXTCompressedImage & image);
+    // Explicitly load as an array texture.
+    // m_resId has only the texture base name + extension, e.g.:
+    //   'background.dds'
+    // Then we will also load into the array:
+    //   'background_diff.dds' -> diffuse texture
+    //   'background_ddn.dds'  -> normal map
+    //   'background_spec.dds' -> specular map
+    // And they all get added to the same texture array.
+    // Same mipmapping behavior of Texture applies.
+    bool loadAsArrayTexture();
+
+    // Load the texture from already in-memory Image or DXTCompressedImage instance.
+    // Layer count is implicitly = 1. Might generate mipmaps.
+    template<typename ImageType>
+    bool loadFromImageInMemory(const ImageType & image);
+
+    // Same as loadAsArrayTexture(), but takes an array of already in-memory images instead.
+    // All images must have same dimensions, mipmap count and format.
+    template<typename ImageType>
+    bool loadAsArrayTextureFromImagesInMemory(const ImageType * images, int layerCount);
 
     // This can be safely called after the texture staging buffer of
     // the context has been submitted and waited for completion.
@@ -111,8 +143,9 @@ public:
 private:
 
     void clear();
-    void initVkTextureData(const ImageSurface * surfaces, int surfaceCount,
-                           VkFormat imageFormat, Size2D imageSize,
+    static bool isArrayTextureName(const str_ref & name);
+    void initVkTextureData(const ImageSurface * const * surfaces, int surfaceCount,
+                           int layerCount, VkFormat imageFormat, Size2D imageSize,
                            std::size_t memorySizeBytes);
 
     const VulkanContext * m_vkContext;
@@ -129,8 +162,9 @@ private:
     VkFormat m_imageFormat;
     VkImageViewType m_imageViewType;
 
-    std::uint32_t m_imageMipmaps   : 31;
-    std::uint32_t m_dontGenMipmaps : 1;
+    std::uint16_t m_imageMipmapCount;
+    std::uint16_t m_imageLayerCount;
+    bool m_dontGenMipmaps;
 };
 
 // ========================================================
@@ -210,12 +244,22 @@ inline VkDeviceMemory Texture::imageMemoryHandle() const
 
 inline bool Texture::isMipmapped() const
 {
-    return (m_imageMipmaps > 1);
+    return (m_imageMipmapCount > 1);
 }
 
 inline int Texture::mipmapCount() const
 {
-    return static_cast<int>(m_imageMipmaps);
+    return static_cast<int>(m_imageMipmapCount);
+}
+
+inline bool Texture::isArrayTexture() const
+{
+    return (m_imageLayerCount > 1);
+}
+
+inline int Texture::layerCount() const
+{
+    return static_cast<int>(m_imageLayerCount);
 }
 
 inline const Size2D Texture::size() const
@@ -241,6 +285,60 @@ inline void Texture::setGenerateMipmapsOnLoad(const bool trueIfShouldGenMipmaps)
 inline bool Texture::generateMipmapsOnLoad() const
 {
     return !m_dontGenMipmaps;
+}
+
+template<typename ImageType>
+inline bool Texture::loadFromImageInMemory(const ImageType & image)
+{
+    if (isShutdown() || !image.isValid())
+    {
+        Log::warningF("Texture/Image already shutdown and cannot be loaded!");
+        return false;
+    }
+
+    const ImageSurface * surfaces = image.surfaces();
+    initVkTextureData(&surfaces, image.surfaceCount(), /* layerCount = */ 1,
+                      toVkImageFormat(image.format()), image.size(),
+                      image.memoryUsageBytes());
+    return true;
+}
+
+template <typename ImageType>
+inline bool Texture::loadAsArrayTextureFromImagesInMemory(const ImageType * const images, const int layerCount)
+{
+    assert(layerCount <= MaxLayers);
+    if (isShutdown())
+    {
+        Log::warningF("Texture already shutdown and cannot be loaded!");
+        return false;
+    }
+
+    const Size2D sizeLayer0   = images[0].size();
+    const auto formatLayer0   = images[0].format();
+    const int surfCountLayer0 = images[0].surfaceCount();
+
+    std::size_t memorySizeBytes = 0;
+    FixedSizeArray<const ImageSurface *, MaxLayers> layerSurfaces;
+
+    for (int l = 0; l < layerCount; ++l)
+    {
+        if (images[l].size()         != sizeLayer0   ||
+            images[l].format()       != formatLayer0 ||
+            images[l].surfaceCount() != surfCountLayer0)
+        {
+            Log::errorF("Array texture requires all image layers to have the same size, format and mip count!");
+            return false;
+        }
+
+        memorySizeBytes += images[l].memoryUsageBytes();
+        layerSurfaces.push(images[l].surfaces());
+    }
+
+    const ImageSurface * const * surfaces = layerSurfaces.data();
+    initVkTextureData(surfaces, surfCountLayer0, layerSurfaces.size(),
+                      toVkImageFormat(formatLayer0), sizeLayer0,
+                      memorySizeBytes);
+    return true;
 }
 
 // ========================================================
