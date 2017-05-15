@@ -40,8 +40,8 @@ public:
     Matrix4 projMatrix;
     Matrix4 vpMatrix;
 
-    float rotateSpeed   = 25.0f; // Mouse rotation
-    float moveSpeed     = 8.0f;  // Keyboard camera movement
+    float rotateSpeed   = 27.0f; // Mouse rotation
+    float moveSpeed     = 6.0f;  // Keyboard camera movement
     float maxPitchAngle = 89.5f; // Max degrees of rotation to avoid lock
     float pitchAmount   = 0.0f;  // Stored from latest update
     float fovYDegrees   = 0.0f;  // Set via constructor or adjustFov() (in degrees!)

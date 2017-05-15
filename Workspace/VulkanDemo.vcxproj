@@ -103,6 +103,7 @@
     <ClCompile Include="..\Source\Apps\HelloTriangle\VkAppHelloTriangle.cpp" />
     <ClCompile Include="..\Source\Apps\Main.cpp" />
     <ClCompile Include="..\Source\Apps\MipMapsAndLayers\VkAppMipMapsAndLayers.cpp" />
+    <ClCompile Include="..\Source\Apps\Scene\VkAppScene.cpp" />
     <ClCompile Include="..\Source\Apps\TeapotModel\VkAppTeapotModel.cpp" />
     <ClCompile Include="..\Source\Apps\TexturedCubes\VkAppTexturedCubes.cpp" />
     <ClCompile Include="..\Source\Apps\VulkanDemoApp.cpp" />
@@ -113,6 +114,7 @@
     <ClCompile Include="..\Source\VkToolbox\Hashing.cpp" />
     <ClCompile Include="..\Source\VkToolbox\Image.cpp" />
     <ClCompile Include="..\Source\VkToolbox\Input.cpp" />
+    <ClCompile Include="..\Source\VkToolbox\JobQueue.cpp" />
     <ClCompile Include="..\Source\VkToolbox\Log.cpp" />
     <ClCompile Include="..\Source\VkToolbox\Mesh.cpp" />
     <ClCompile Include="..\Source\VkToolbox\OSWindow.cpp" />
@@ -144,7 +146,9 @@
     <ClInclude Include="..\Source\VkToolbox\GlslShader.hpp" />
     <ClInclude Include="..\Source\VkToolbox\Hashing.hpp" />
     <ClInclude Include="..\Source\VkToolbox\Image.hpp" />
+    <ClInclude Include="..\Source\VkToolbox\InPlaceFunction.hpp" />
     <ClInclude Include="..\Source\VkToolbox\Input.hpp" />
+    <ClInclude Include="..\Source\VkToolbox\JobQueue.hpp" />
     <ClInclude Include="..\Source\VkToolbox\Log.hpp" />
     <ClInclude Include="..\Source\VkToolbox\Mesh.hpp" />
     <ClInclude Include="..\Source\VkToolbox\OSWindow.hpp" />

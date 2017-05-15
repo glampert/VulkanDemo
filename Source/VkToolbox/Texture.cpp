@@ -7,6 +7,7 @@
 // ================================================================================================
 
 #include "Texture.hpp"
+#include "ResourceManager.hpp"
 
 namespace VkToolbox
 {
@@ -85,6 +86,8 @@ const VkSamplerCreateInfo & Sampler::defaults()
 // class Texture:
 // ========================================================
 
+std::uint32_t Texture::sm_stagingChainHead = TextureManager::InvalidResIndex;
+
 const char * const Texture::LayerSuffixes[] = {
     "diff",
     "ddn",
@@ -102,6 +105,7 @@ Texture::Texture(const VulkanContext & vkContext, StrId<str> && id)
     , m_imageMemHandle{ VK_NULL_HANDLE }
     , m_stagingBufferHandle{ VK_NULL_HANDLE }
     , m_stagingBufferMemHandle{ VK_NULL_HANDLE }
+    , m_stagingLinkNext{ TextureManager::InvalidResIndex }
     , m_imageSize{ 0,0 }
     , m_imageFormat{ VK_FORMAT_UNDEFINED }
     , m_imageViewType{ VK_IMAGE_VIEW_TYPE_2D }
@@ -119,6 +123,7 @@ Texture::Texture(Texture && other)
     , m_imageMemHandle{ other.m_imageMemHandle }
     , m_stagingBufferHandle{ other.m_stagingBufferHandle }
     , m_stagingBufferMemHandle{ other.m_stagingBufferMemHandle }
+    , m_stagingLinkNext{ other.m_stagingLinkNext }
     , m_imageSize{ other.m_imageSize }
     , m_imageFormat{ other.m_imageFormat }
     , m_imageViewType{ other.m_imageViewType }
@@ -140,6 +145,7 @@ Texture & Texture::operator = (Texture && other)
     m_imageMemHandle         = other.m_imageMemHandle;
     m_stagingBufferHandle    = other.m_stagingBufferHandle;
     m_stagingBufferMemHandle = other.m_stagingBufferMemHandle;
+    m_stagingLinkNext        = other.m_stagingLinkNext;
     m_imageSize              = other.m_imageSize;
     m_imageFormat            = other.m_imageFormat;
     m_imageViewType          = other.m_imageViewType;
@@ -275,6 +281,8 @@ bool Texture::loadAsArrayTexture()
 
 void Texture::unload()
 {
+    if (isShutdown()) { return; }
+
     const auto device   = m_vkContext->deviceHandle();
     const auto allocCBs = m_vkContext->allocationCallbacks();
 
@@ -312,6 +320,8 @@ void Texture::releaseStagingResources()
         vkFreeMemory(device, m_stagingBufferMemHandle, allocCBs);
         m_stagingBufferMemHandle = VK_NULL_HANDLE;
     }
+
+    m_stagingLinkNext = TextureManager::InvalidResIndex;
 }
 
 void Texture::shutdown()
@@ -333,6 +343,7 @@ void Texture::clear()
     m_imageMemHandle         = VK_NULL_HANDLE;
     m_stagingBufferHandle    = VK_NULL_HANDLE;
     m_stagingBufferMemHandle = VK_NULL_HANDLE;
+    m_stagingLinkNext        = TextureManager::InvalidResIndex;
 }
 
 void Texture::initVkTextureData(const ImageSurface * const * surfaces, const int surfaceCount,
@@ -479,6 +490,11 @@ void Texture::initVkTextureData(const ImageSurface * const * surfaces, const int
     m_imageMipmapCount = narrowCast<std::uint16_t>(surfaceCount);
     m_imageLayerCount  = narrowCast<std::uint16_t>(layerCount);
     m_imageViewType    = (layerCount > 1 ? VK_IMAGE_VIEW_TYPE_2D_ARRAY : VK_IMAGE_VIEW_TYPE_2D);
+
+    // Link itself to the staging chain, so that the staging resources
+    // get freed later on by the TextureManager.
+    m_stagingLinkNext   = sm_stagingChainHead;
+    sm_stagingChainHead = TextureManager::indexOf(*this);
 }
 
 VkFormat Texture::toVkImageFormat(const Image::Format format)

@@ -3,14 +3,14 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <LocalDebuggerWorkingDirectory>$(SolutionDir)..\</LocalDebuggerWorkingDirectory>
     <DebuggerFlavor>WindowsLocalDebugger</DebuggerFlavor>
-    <LocalDebuggerCommandArguments>-VkAppMipMapsAndLayers</LocalDebuggerCommandArguments>
+    <LocalDebuggerCommandArguments>-VkAppScene</LocalDebuggerCommandArguments>
     <LocalDebuggerEnvironment>PATH=%PATH%;$(SolutionDir)../Source/External/prebuilt_libs/assimp/debug_x64/
 $(LocalDebuggerEnvironment)</LocalDebuggerEnvironment>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <LocalDebuggerWorkingDirectory>$(SolutionDir)..\</LocalDebuggerWorkingDirectory>
     <DebuggerFlavor>WindowsLocalDebugger</DebuggerFlavor>
-    <LocalDebuggerCommandArguments>-VkAppMipMapsAndLayers</LocalDebuggerCommandArguments>
+    <LocalDebuggerCommandArguments>-VkAppScene</LocalDebuggerCommandArguments>
     <LocalDebuggerEnvironment>PATH=%PATH%;$(SolutionDir)../Source/External/prebuilt_libs/assimp/release_x64/</LocalDebuggerEnvironment>
   </PropertyGroup>
 </Project>

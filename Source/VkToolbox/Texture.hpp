@@ -142,6 +142,9 @@ public:
 
 private:
 
+    template<typename T>
+    friend class ResourceManager;
+
     void clear();
     static bool isArrayTextureName(const str_ref & name);
     void initVkTextureData(const ImageSurface * const * surfaces, int surfaceCount,
@@ -157,6 +160,9 @@ private:
 
     VkBuffer m_stagingBufferHandle;
     VkDeviceMemory m_stagingBufferMemHandle;
+
+    std::uint32_t m_stagingLinkNext;
+    static std::uint32_t sm_stagingChainHead;
 
     Size2D m_imageSize;
     VkFormat m_imageFormat;

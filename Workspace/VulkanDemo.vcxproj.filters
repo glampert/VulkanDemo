@@ -35,6 +35,9 @@
     <Filter Include="Source Files\Apps\MipMapsAndLayers">
       <UniqueIdentifier>{fa67e9dd-e2df-42be-81c3-a5bc9c1bcc8d}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Source Files\Apps\Scene">
+      <UniqueIdentifier>{3c2b2d45-ce26-4ca8-8e1b-4929830cc851}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\Source\VkToolbox\GlslShader.cpp">
@@ -99,6 +102,12 @@
     </ClCompile>
     <ClCompile Include="..\Source\Apps\MipMapsAndLayers\VkAppMipMapsAndLayers.cpp">
       <Filter>Source Files\Apps\MipMapsAndLayers</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Source\Apps\Scene\VkAppScene.cpp">
+      <Filter>Source Files\Apps\Scene</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Source\VkToolbox\JobQueue.cpp">
+      <Filter>Source Files\VkToolbox</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -199,6 +208,12 @@
       <Filter>Source Files\VkToolbox</Filter>
     </ClInclude>
     <ClInclude Include="..\Source\VkToolbox\Camera.hpp">
+      <Filter>Source Files\VkToolbox</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Source\VkToolbox\JobQueue.hpp">
+      <Filter>Source Files\VkToolbox</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Source\VkToolbox\InPlaceFunction.hpp">
       <Filter>Source Files\VkToolbox</Filter>
     </ClInclude>
   </ItemGroup>
