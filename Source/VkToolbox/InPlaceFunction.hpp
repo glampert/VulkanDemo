@@ -119,7 +119,7 @@ protected:
 
     template<typename F> void placeFunctionObject(F && fn)
     {
-        static_assert(sizeof(F) <= kMaxSize, "Function object too big to fit in InPlaceFunction! Use a bigger size.");
+        static_assert(sizeof(CallableObjectImpl<F>) <= kMaxSize, "Function object too big to fit in InPlaceFunction! Use a bigger size.");
         CallableObjectImpl<F> temp{ std::move(fn) };
         setCallablePtr(temp.moveConstruct(placementBuffer()));
     }
@@ -257,14 +257,12 @@ public:
 // Aliases for common sizes:
 // ========================================================
 
-template<typename F> using InPlaceFunction16  = InPlaceFunction< 16, F>;
 template<typename F> using InPlaceFunction32  = InPlaceFunction< 32, F>;
 template<typename F> using InPlaceFunction64  = InPlaceFunction< 64, F>;
 template<typename F> using InPlaceFunction128 = InPlaceFunction<128, F>;
 template<typename F> using InPlaceFunction256 = InPlaceFunction<256, F>;
 template<typename F> using InPlaceFunction512 = InPlaceFunction<512, F>;
 
-static_assert(sizeof(InPlaceFunction16<void()>)  ==  16, "Wrong size for InPlaceFunction16");
 static_assert(sizeof(InPlaceFunction32<void()>)  ==  32, "Wrong size for InPlaceFunction32");
 static_assert(sizeof(InPlaceFunction64<void()>)  ==  64, "Wrong size for InPlaceFunction64");
 static_assert(sizeof(InPlaceFunction128<void()>) == 128, "Wrong size for InPlaceFunction128");

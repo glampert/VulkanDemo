@@ -64,7 +64,7 @@ using GlslShaderStageArray = FixedSizeArray<GlslShaderStage, GlslShaderStage::Ma
 namespace GlslShaderPreproc
 {
 
-struct Define final
+struct Define
 {
     str32 name;
     str32 value;
@@ -124,6 +124,10 @@ public:
     // Movable.
     GlslShader(GlslShader && other);
     GlslShader & operator = (GlslShader && other);
+
+    // Not copyable.
+    GlslShader(const GlslShader &) = delete;
+    GlslShader & operator = (const GlslShader &) = delete;
 
     // Resourcing methods:
     bool load();

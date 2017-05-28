@@ -23,6 +23,7 @@ class Sampler final
 {
 public:
 
+    Sampler() = default;
     explicit Sampler(const VulkanContext & vkContext);
     Sampler(const VulkanContext & vkContext, const VkSamplerCreateInfo & samplerCreateInfo);
     ~Sampler();
@@ -50,7 +51,7 @@ public:
 private:
 
     VkSampler             m_samplerHandle = VK_NULL_HANDLE;
-    const VulkanContext * m_vkContext;
+    const VulkanContext * m_vkContext     = nullptr;
     VkSamplerCreateInfo   m_samplerDesc;
 };
 
@@ -84,6 +85,10 @@ public:
     // Movable.
     Texture(Texture && other);
     Texture & operator = (Texture && other);
+
+    // Not copyable.
+    Texture(const Texture &) = delete;
+    Texture & operator = (const Texture &) = delete;
 
     // Resourcing methods:
     bool load();

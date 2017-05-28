@@ -245,12 +245,14 @@ void VkAppTeapotModel::initVertexBuffer()
     m_indexBuffer.writeN(make_array_view(m_mesh.indexes));
 
     // Validate the index buffer:
+    #if DEBUG
     assert(m_vertexBuffer.elementCount() == m_mesh.vertexCount());
     assert(m_indexBuffer.elementCount()  == m_mesh.indexCount());
     for (MeshIndex idx : m_mesh.indexes)
     {
         assert(idx < MeshIndex(m_mesh.vertexCount()));
     }
+    #endif // DEBUG
 }
 
 void VkAppTeapotModel::updateBuffers(CommandBuffer & cmdBuff)

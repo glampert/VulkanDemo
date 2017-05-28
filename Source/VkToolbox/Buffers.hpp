@@ -105,9 +105,12 @@ public:
 
     void unmapMemory()
     {
-        vkUnmapMemory(BaseBuffer::context().deviceHandle(),
-                      BaseBuffer::stagingBufferMemoryHandle());
-        m_mappedPtr = nullptr;
+        if (m_mappedPtr != nullptr)
+        {
+            vkUnmapMemory(BaseBuffer::context().deviceHandle(),
+                          BaseBuffer::stagingBufferMemoryHandle());
+            m_mappedPtr = nullptr;
+        }
     }
 
     void * mappedPointer() const { return m_mappedPtr; }

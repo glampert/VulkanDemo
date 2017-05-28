@@ -8,6 +8,14 @@
 
 #include "ResourceManager.hpp"
 
+#ifdef _MSC_VER
+    #include <intrin.h>
+    __forceinline void writeByteAtomically(volatile std::uint8_t * dest, std::uint8_t value)
+    {
+        _InterlockedExchange8(reinterpret_cast<volatile char *>(dest), value);
+    }
+#endif // _MSC_VER
+
 namespace VkToolbox
 {
 
@@ -18,11 +26,11 @@ const char * resourceManagerThreadName(); // unimplemented - fails to link
 
 template<> const char * resourceManagerThreadName<Texture>()
 {
-    return "Texture Loader";
+    return "TextureLoaderThread";
 }
 template<> const char * resourceManagerThreadName<GlslShader>()
 {
-    return "GLSL Shader Loader";
+    return "ShaderLoaderThread";
 }
 
 // ========================================================
@@ -44,6 +52,9 @@ bool ResourceManager<T>::sm_inResourceLoadState(false);
 template<typename T>
 JobQueue ResourceManager<T>::sm_asyncLoadRequests(resourceManagerThreadName<T>());
 
+template<typename T>
+std::vector<std::uint8_t> ResourceManager<T>::sm_pendingAsyncRequestFlags;
+
 // ========================================================
 
 template<typename T>
@@ -58,6 +69,10 @@ void ResourceManager<T>::shutdown()
 {
     sm_resourcesStore.clear();
     sm_resourcesStore.shrink_to_fit();
+
+    sm_pendingAsyncRequestFlags.clear();
+    sm_pendingAsyncRequestFlags.shrink_to_fit();
+
     sm_resourcesLookupTable.clear_and_free();
 
     sm_vkContext = nullptr;
@@ -70,6 +85,7 @@ void ResourceManager<T>::preallocate(const int resourceCount)
     if (resourceCount > 0)
     {
         sm_resourcesStore.reserve(resourceCount);
+        sm_pendingAsyncRequestFlags.reserve(resourceCount);
     }
 }
 
@@ -89,12 +105,14 @@ template<typename T>
 void ResourceManager<T>::pushAsyncLoadRequest(const ResourceIndex resIndex)
 {
     assert(resIndex < sm_resourcesStore.size());
+    writeByteAtomically(&sm_pendingAsyncRequestFlags[resIndex], true);
     sm_asyncLoadRequests.pushJob([resIndex]()
     {
-        if (!sm_resourcesStore[resIndex].load())
+        if (!mutableResourceRef(resIndex).load())
         {
             Log::warningF("Async load request failed for resource at index %u", resIndex);
         }
+        writeByteAtomically(&sm_pendingAsyncRequestFlags[resIndex], false);
     });
 }
 
@@ -105,12 +123,22 @@ void ResourceManager<T>::waitPendingAsyncLoadRequests()
 }
 
 template<typename T>
+bool ResourceManager<T>::hasPendingAsyncLoadRequest(const ResourceIndex resIndex)
+{
+    return (sm_pendingAsyncRequestFlags[resIndex] != false);
+}
+
+template<typename T>
 typename ResourceManager<T>::ResourceIndex ResourceManager<T>::createNewSlot(ResourceId id)
 {
     const auto hashKey = id.hash.value;
+
     sm_resourcesStore.emplace_back(*sm_vkContext, std::move(id));
+    sm_pendingAsyncRequestFlags.push_back(false);
+
     const auto index = narrowCast<ResourceIndex>(sm_resourcesStore.size() - 1);
     sm_resourcesLookupTable.insert(hashKey, index);
+
     return index;
 }
 
@@ -165,7 +193,7 @@ bool ResourceManager<T>::findOrLoad(ResourceId inResId, ResourceIndex * outResIn
 }
 
 template<typename T>
-bool ResourceManager<T>::registerSlot(ResourceId inResId, ResourceIndex * outResIndex)
+void ResourceManager<T>::registerSlot(ResourceId inResId, ResourceIndex * outResIndex)
 {
     assert(!inResId.isNull());
     assert(outResIndex != nullptr);
@@ -182,7 +210,6 @@ bool ResourceManager<T>::registerSlot(ResourceId inResId, ResourceIndex * outRes
     }
 
     (*outResIndex) = index;
-    return true;
 }
 
 template<typename T>
@@ -253,6 +280,7 @@ void ResourceManager<T>::unregisterAll()
 {
     unloadAll();
     sm_resourcesLookupTable.clear();
+    sm_pendingAsyncRequestFlags.clear();
     sm_resourcesStore.clear();
 }
 
@@ -323,6 +351,10 @@ void ResourceManager<Texture>::endResourceLoad()
     cmdBuff.submitAndWaitComplete(sm_vkContext->graphisQueue());
     cmdBuff.reset();
 
+    #if DEBUG
+    int releasedCount = 0;
+    #endif // DEBUG
+
     ResourceIndex texIdx = Texture::sm_stagingChainHead;
     while (texIdx != InvalidResIndex)
     {
@@ -330,8 +362,16 @@ void ResourceManager<Texture>::endResourceLoad()
         ResourceIndex nextIdx = tex.m_stagingLinkNext;
         tex.releaseStagingResources();
         texIdx = nextIdx;
+
+        #if DEBUG
+        ++releasedCount;
+        #endif // DEBUG
     }
     Texture::sm_stagingChainHead = InvalidResIndex;
+
+    #if DEBUG
+    Log::debugF("TextureManager: Released %i texture staring buffers.", releasedCount);
+    #endif // DEBUG
 }
 
 // ========================================================

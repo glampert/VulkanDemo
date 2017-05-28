@@ -87,6 +87,7 @@ class PipelineStateObject final
 {
 public:
 
+    PipelineStateObject() = default;
     explicit PipelineStateObject(const PipelineStateLayout & layout);
     PipelineStateObject(const PipelineStateLayout & layout, const PipelineStateBuilder & psoBuilder);
     ~PipelineStateObject();
@@ -106,7 +107,7 @@ public:
 private:
 
     VkPipeline m_pipelineHandle = VK_NULL_HANDLE;
-    const PipelineStateLayout * m_layout;
+    const PipelineStateLayout * m_layout = nullptr;
 };
 
 // ========================================================

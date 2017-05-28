@@ -28,7 +28,7 @@ constexpr float DegToRad = PI / 180.0f;
 constexpr float RadToDeg = 180.0f / PI;
 
 // Width and height pair.
-struct Size2D final
+struct Size2D
 {
     int width;
     int height;
@@ -44,7 +44,7 @@ inline bool operator != (const Size2D & a, const Size2D & b)
 }
 
 // Width, height and depth triplet.
-struct Size3D final
+struct Size3D
 {
     int width;
     int height;

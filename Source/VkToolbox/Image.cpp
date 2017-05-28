@@ -917,7 +917,7 @@ bool DXTCompressedImage::initFromFile(const char * const filePath)
     std::uint32_t h = header.height;
     allocateImageStorage(w, h, header.mipMapCount, blockSize, pixelFormat);
 
-    Log::debugF("Load DDS %s: (w:%u, h:%u, mipmaps:%u, blockSize:%u, format:%s, dx10:%c)",
+    Log::debugF("Load DDS '%s': (w:%u, h:%u, mipmaps:%u, blockSize:%u, format:%s, dx10:%c)",
                 filePath, w, h, header.mipMapCount, blockSize, Image::FormatStrings[pixelFormat], (dx10 ? 'y' : 'n'));
 
     for (std::uint32_t i = 0; (i < header.mipMapCount) && (i < MaxSurfaces); ++i)

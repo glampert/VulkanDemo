@@ -159,7 +159,7 @@ Texture & Texture::operator = (Texture && other)
 
 bool Texture::isArrayTextureName(const str_ref & name)
 {
-    static const char * ArrayTexPrefix = "a_";
+    static const char * const ArrayTexPrefix = "a_";
 
     int lastSlash = name.last_index_of('/');
     if (lastSlash == -1)

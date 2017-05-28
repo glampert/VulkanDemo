@@ -36,7 +36,7 @@ struct Float4
     float x, y, z, w;
 };
 
-struct MeshVertex final
+struct MeshVertex
 {
     Float3 position;
     Float2 texcoords;
@@ -57,7 +57,7 @@ struct MeshVertex final
     static const std::array<VkVertexInputAttributeDescription, 6> & attributeDescriptions();
 };
 
-struct MeshSubSection final
+struct MeshSubSection
 {
     int vertexStart;
     int vertexCount;
@@ -66,14 +66,52 @@ struct MeshSubSection final
     int materialIndex;
 };
 
-struct MeshMaterial final
+struct MeshMaterialString
+{
+    static constexpr int MaxChars = 64;
+
+    // Must be a POD for the binary load/saving.
+    int  length;
+    char chars[MaxChars];
+
+    MeshMaterialString() : length{ 0 }
+    {
+        std::memset(chars, 0, MaxChars);
+    }
+    MeshMaterialString(const char * const src)
+    {
+        assert(std::strlen(src) < MaxChars);
+        length = str::copy(chars, MaxChars, src);
+    }
+    MeshMaterialString & operator = (const char * const src)
+    {
+        assert(std::strlen(src) < MaxChars);
+        length = str::copy(chars, MaxChars, src);
+        return *this;
+    }
+};
+
+struct MeshMaterial
 {
     static constexpr int InvalidIndex = -1;
 
-    //TODO
+    int index = InvalidIndex;
+    MeshMaterialString name;
+
+    Color32 diffuseColor;
+    Color32 specularColor;
+    Color32 emissiveColor;
+    Color32 ambientColor;
+    float   shininess = 0.0f;
+
+    MeshMaterialString diffuseTexture;
+    MeshMaterialString normalTexture;
+    MeshMaterialString specularTexture;
+
+    void setDefaults();
 };
 
-struct MeshSaveHeader final
+struct MeshBinaryHeader
 {
     std::uint32_t magic; // BMSH 4cc
     std::int32_t  vertexCount;
@@ -83,8 +121,10 @@ struct MeshSaveHeader final
     // Arrays of data follow in the same order.
 };
 
-struct Mesh final
+class Mesh final
 {
+public:
+
     static const char * const BinaryFormatFileExt;
 
     std::vector<MeshVertex>     vertexes;
@@ -98,8 +138,12 @@ struct Mesh final
     int materialCount() const { return static_cast<int>(materials.size()); }
 
     Mesh() = default;
-    Mesh(const Mesh & other) = delete;
-    Mesh & operator = (const Mesh & other) = delete;
+
+    Mesh(Mesh && other);
+    Mesh & operator = (Mesh && other);
+
+    Mesh(const Mesh &) = delete;
+    Mesh & operator = (const Mesh &) = delete;
 
     bool initFromFile(const char * filePath, float vertexScaling = 1.0f);
     bool isInitialized() const;

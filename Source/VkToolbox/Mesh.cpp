@@ -19,14 +19,13 @@
 // ASSIMP log hook only enabled on debug.
 #if DEBUG
     #include <mutex>
-    #define VKTB_REGISTER_ASSIMP_LOG_CALLBACK 1
+    #define VKTB_REGISTER_ASSIMP_LOG_CALLBACK 1 // Registers the ASSIMP log redirection
+    #define VKTB_VERBOSE_ASSIMP_LOGGING       1 // If the ASSIMP log hook is enabled, this controls the verbosity
+    #define VKTB_ASSIMP_DUMP_MAT_TEXTURES     1 // Lists all textures when importing the materials
     static std::once_flag s_assimpLogHookRegistered;
 #else // !DEBUG
     #define VKTB_REGISTER_ASSIMP_LOG_CALLBACK 0
 #endif // DEBUG
-
-// If the ASSIMP log hook is enabled, this controls the verbosity.
-#define VKTB_VERBOSE_ASSIMP_LOGGING 1
 
 namespace VkToolbox
 {
@@ -167,6 +166,114 @@ static void assimpImportCopyIndexes(const aiMesh & inSubmesh, const MeshIndex ba
     }
 }
 
+static void assimpImportTextures(const aiMaterial & inMat, const aiTextureType target, MeshMaterial & outNewMat)
+{
+    aiString path;
+    const unsigned textureCount = inMat.GetTextureCount(target);
+
+    // Process every texture of this type for the given material:
+    for (unsigned nTex = 0; nTex < textureCount; ++nTex)
+    {
+        path.Clear();
+        if (inMat.GetTexture(target, nTex, &path) != AI_SUCCESS)
+        {
+            Log::warningF("Failed to get material texture at index %u!", nTex);
+            continue;
+        }
+
+        switch (target)
+        {
+        case aiTextureType_DIFFUSE  : { outNewMat.diffuseTexture  = path.data;  break; }
+        case aiTextureType_NORMALS  : { outNewMat.normalTexture   = path.data;  break; }
+        case aiTextureType_SPECULAR : { outNewMat.specularTexture = path.data;  break; }
+        default : { Log::errorF("Texture target not supported at the moment!"); break; }
+        } // switch (target)
+    }
+}
+
+#ifdef VKTB_ASSIMP_DUMP_MAT_TEXTURES
+static void assimpListAllTextures(const aiMaterial & inMat)
+{
+    static const struct {
+        aiTextureType texType;
+        const char * description;
+    } s_texInfo[] = {
+        { aiTextureType_DIFFUSE,      "diffuse map"      },
+        { aiTextureType_NORMALS,      "normal map"       },
+        { aiTextureType_SPECULAR,     "specular map"     },
+        { aiTextureType_OPACITY,      "alpha map"        },
+        { aiTextureType_HEIGHT,       "height map"       },
+        { aiTextureType_EMISSIVE,     "emissive map"     },
+        { aiTextureType_SHININESS,    "gloss map"        },
+        { aiTextureType_AMBIENT,      "ambient map"      },
+        { aiTextureType_LIGHTMAP,     "light map"        },
+        { aiTextureType_DISPLACEMENT, "displacement map" },
+        { aiTextureType_REFLECTION,   "reflection map"   },
+        { aiTextureType_NONE,         "none/invalid"     },
+        { aiTextureType_UNKNOWN,      "unknown/invalid"  }
+    };
+
+    aiString str;
+    inMat.Get(AI_MATKEY_NAME, str);
+
+    Log::debugF("----- Texture listing for ASSIMP material \"%s\" -----", str.data);
+    for (std::size_t texType = 0; texType < arrayLength(s_texInfo); ++texType)
+    {
+        // List every texture of this type for the given material:
+        const unsigned textureCount = inMat.GetTextureCount(s_texInfo[texType].texType);
+        for (unsigned nTex = 0; nTex < textureCount; ++nTex)
+        {
+            str.Clear();
+            if (inMat.GetTexture(s_texInfo[texType].texType, nTex, &str) == AI_SUCCESS)
+            {
+                Log::debugF("[%u]> %s: \"%s\"", nTex, s_texInfo[texType].description, str.data);
+            }
+        }
+    }
+}
+#endif // VKTB_ASSIMP_DUMP_MAT_TEXTURES
+
+static void assimpImportMaterial(const aiMaterial & inMat, const aiString & inMatName, MeshMaterial & outNewMat)
+{
+    auto toColor32 = [](const aiColor4D & c) 
+    {
+        return Color32{ Vector4{ c.r, c.g, c.b, c.a } };
+    };
+
+    outNewMat.name = inMatName.data;
+
+    // Surface colors:
+    aiColor4D diffuseColor{ 1.0f, 1.0f, 1.0f, 1.0f };
+    inMat.Get(AI_MATKEY_COLOR_DIFFUSE, diffuseColor);
+    outNewMat.diffuseColor = toColor32(diffuseColor);
+
+    aiColor4D specularColor{ 0.5f, 0.5f, 0.5f, 1.0f };
+    inMat.Get(AI_MATKEY_COLOR_SPECULAR, specularColor);
+    outNewMat.specularColor = toColor32(specularColor);
+
+    aiColor4D emissiveColor{ 0.0f, 0.0f, 0.0f, 1.0f };
+    inMat.Get(AI_MATKEY_COLOR_EMISSIVE, emissiveColor);
+    outNewMat.emissiveColor = toColor32(emissiveColor);
+
+    aiColor4D ambientColor{ 0.2f, 0.2f, 0.2f, 1.0f };
+    inMat.Get(AI_MATKEY_COLOR_AMBIENT, ambientColor);
+    outNewMat.ambientColor = toColor32(ambientColor);
+
+    float shininess = 50.0f;
+    inMat.Get(AI_MATKEY_SHININESS, shininess);
+    outNewMat.shininess = shininess;
+
+    // Debug spew:
+    #ifdef VKTB_ASSIMP_DUMP_MAT_TEXTURES
+    assimpListAllTextures(inMat);
+    #endif // VKTB_ASSIMP_DUMP_MAT_TEXTURES
+
+    // Textures:
+    assimpImportTextures(inMat, aiTextureType_DIFFUSE,  outNewMat);
+    assimpImportTextures(inMat, aiTextureType_NORMALS,  outNewMat);
+    assimpImportTextures(inMat, aiTextureType_SPECULAR, outNewMat);
+}
+
 static void assimpImportMeshMain(const aiScene & inScene, const float vertexScaling, Mesh & outMesh)
 {
     assimpImportPreallocMeshArrays(inScene, outMesh);
@@ -194,7 +301,7 @@ static void assimpImportMeshMain(const aiScene & inScene, const float vertexScal
         outMesh.submeshes[m] = MeshSubSection{
             submeshVertStart, submeshVertCount,
             submeshIdxStart,  submeshIdxCount,
-            MeshMaterial::InvalidIndex
+            int(inSubmeshes[m]->mMaterialIndex)
         };
 
         submeshVertStart += submeshVertCount;
@@ -209,12 +316,27 @@ static void assimpImportMeshMain(const aiScene & inScene, const float vertexScal
 
     for (int m = 0; m < materialCount; ++m)
     {
-        // TODO!
+        const aiMaterial * mat = inMaterials[m];
+
+        MeshMaterial newMaterial;
+        newMaterial.index = m;
+        newMaterial.setDefaults();
+
+        aiString matName;
+        if (mat->Get(AI_MATKEY_NAME, matName) == AI_SUCCESS &&
+            matName.length != 0 && std::strcmp(matName.data, AI_DEFAULT_MATERIAL_NAME) != 0)
+        {
+            assimpImportMaterial(*mat, matName, newMaterial);
+        }
+
+        outMesh.materials[m] = std::move(newMaterial);
     }
 }
 
 static bool meshImportWithAssimp(const char * const filePath, const float vertexScaling, Mesh & outMesh)
 {
+    Log::debugF("Beginning ASSIMP mesh import...");
+
     // Optional ASSIMP log hook:
     #if VKTB_REGISTER_ASSIMP_LOG_CALLBACK
     std::call_once(s_assimpLogHookRegistered, []() {
@@ -267,6 +389,23 @@ static bool meshImportWithAssimp(const char * const filePath, const float vertex
 
 const char * const Mesh::BinaryFormatFileExt = ".bmesh";
 
+Mesh::Mesh(Mesh && other)
+    : vertexes { std::move(other.vertexes)  }
+    , indexes  { std::move(other.indexes)   }
+    , submeshes{ std::move(other.submeshes) }
+    , materials{ std::move(other.materials) }
+{
+}
+
+Mesh & Mesh::operator = (Mesh && other)
+{
+    vertexes  = std::move(other.vertexes);
+    indexes   = std::move(other.indexes);
+    submeshes = std::move(other.submeshes);
+    materials = std::move(other.materials);
+    return *this;
+}
+
 bool Mesh::initFromFile(const char * const filePath, const float vertexScaling)
 {
     assert(filePath != nullptr && filePath[0] != '\0');
@@ -309,7 +448,7 @@ bool Mesh::saveBinary(const char * const filePath) const
         return false;
     }
 
-    MeshSaveHeader header;
+    MeshBinaryHeader header;
     header.magic         = 'HSMB';
     header.vertexCount   = vertexCount();
     header.indexCount    = indexCount();
@@ -334,7 +473,7 @@ bool Mesh::loadBinary(const char * const filePath)
         return false;
     }
 
-    MeshSaveHeader header;
+    MeshBinaryHeader header;
     readStructFromFile(fileIn, &header);
 
     if (header.magic != 'HSMB')
@@ -361,6 +500,25 @@ bool Mesh::loadBinary(const char * const filePath)
 
     Log::debugF("Finished loading binary mesh from '%s'.", filePath);
     return true;
+}
+
+// ========================================================
+// MeshMaterial:
+// ========================================================
+
+void MeshMaterial::setDefaults()
+{
+    std::snprintf(name.chars, arrayLength(name.chars), "mat_default_%i", index);
+
+    diffuseColor.fromVector3 ({ 1.0f, 1.0f, 1.0f });
+    specularColor.fromVector3({ 0.5f, 0.5f, 0.5f });
+    emissiveColor.fromVector3({ 0.0f, 0.0f, 0.0f });
+    ambientColor.fromVector3 ({ 0.2f, 0.2f, 0.2f });
+    shininess = 50.0f;
+
+    diffuseTexture  = "Common/dummy_diff.dds";
+    normalTexture   = "Common/dummy_ddn.dds";
+    specularTexture = "Common/dummy_spec.dds";
 }
 
 // ========================================================

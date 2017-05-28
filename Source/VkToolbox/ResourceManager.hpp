@@ -50,6 +50,9 @@ public:
     // Wait all pending requests to finish loading, so you can safely call endResourceLoad().
     static void waitPendingAsyncLoadRequests();
 
+    // Check if the given resource was already queued for async load and hasn't finished yet.
+    static bool hasPendingAsyncLoadRequest(ResourceIndex resIndex);
+
     // Preallocate storage for a number of resources. The parameter is merely a hint.
     static void preallocate(int resourceCount);
 
@@ -60,7 +63,7 @@ public:
     static bool findOrLoad(ResourceId inResId, ResourceIndex * outResIndex);
 
     // Only create the resource slot but don't load yet. Returns existing slot if already registered.
-    static bool registerSlot(ResourceId inResId, ResourceIndex * outResIndex);
+    static void registerSlot(ResourceId inResId, ResourceIndex * outResIndex);
 
     // Check if resource slot already registered (may or may not be loaded).
     static bool isRegistered(const ResourceId & inResId);
@@ -109,11 +112,12 @@ private:
 
     using HashIndex = hash_index<ResourceIndex, std::uint64_t>;
 
-    static const VulkanContext * sm_vkContext;
-    static std::vector<T>        sm_resourcesStore;
-    static HashIndex             sm_resourcesLookupTable;
-    static bool                  sm_inResourceLoadState;
-    static JobQueue              sm_asyncLoadRequests;
+    static const VulkanContext *     sm_vkContext;
+    static std::vector<T>            sm_resourcesStore;
+    static HashIndex                 sm_resourcesLookupTable;
+    static bool                      sm_inResourceLoadState;
+    static JobQueue                  sm_asyncLoadRequests;
+    static std::vector<std::uint8_t> sm_pendingAsyncRequestFlags;
 };
 
 // ========================================================
