@@ -117,6 +117,7 @@
     <ClCompile Include="..\Source\VkToolbox\JobQueue.cpp" />
     <ClCompile Include="..\Source\VkToolbox\Log.cpp" />
     <ClCompile Include="..\Source\VkToolbox\Mesh.cpp" />
+    <ClCompile Include="..\Source\VkToolbox\Model3D.cpp" />
     <ClCompile Include="..\Source\VkToolbox\OSWindow.cpp" />
     <ClCompile Include="..\Source\VkToolbox\ResourceManager.cpp" />
     <ClCompile Include="..\Source\VkToolbox\Texture.cpp" />
@@ -151,6 +152,7 @@
     <ClInclude Include="..\Source\VkToolbox\JobQueue.hpp" />
     <ClInclude Include="..\Source\VkToolbox\Log.hpp" />
     <ClInclude Include="..\Source\VkToolbox\Mesh.hpp" />
+    <ClInclude Include="..\Source\VkToolbox\Model3D.hpp" />
     <ClInclude Include="..\Source\VkToolbox\OSWindow.hpp" />
     <ClInclude Include="..\Source\VkToolbox\PipelineState.hpp" />
     <ClInclude Include="..\Source\VkToolbox\Pool.hpp" />

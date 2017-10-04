@@ -109,6 +109,9 @@
     <ClCompile Include="..\Source\VkToolbox\JobQueue.cpp">
       <Filter>Source Files\VkToolbox</Filter>
     </ClCompile>
+    <ClCompile Include="..\Source\VkToolbox\Model3D.cpp">
+      <Filter>Source Files\VkToolbox</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\Source\VkToolbox\GlslShader.hpp">
@@ -214,6 +217,9 @@
       <Filter>Source Files\VkToolbox</Filter>
     </ClInclude>
     <ClInclude Include="..\Source\VkToolbox\InPlaceFunction.hpp">
+      <Filter>Source Files\VkToolbox</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Source\VkToolbox\Model3D.hpp">
       <Filter>Source Files\VkToolbox</Filter>
     </ClInclude>
   </ItemGroup>

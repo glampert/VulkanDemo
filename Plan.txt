@@ -1,0 +1,45 @@
+
+====================================
+
+Vk demo idea 1:
+ - Render the Sponza Scene
+ - Write a simple deferred renderer 
+ - Support normal/diffuse/specular maps
+ - FXAA and Depth of Field for image filters
+ - Some shadow mapping technique
+ - Explore threaded rendering with Vulkan
+
+Vk demo idea 2:
+ - Render many instances of animated MD5 models
+ - Something like the CoreGL demo I did before, but with several model instances instead, each running a different anim
+ - Explore some way of updating them in parallel (each thread animates and renders a single model)
+
+Vk demo idea 3:
+ - Virtual Texturing revisited?
+ - 256 page size with inner border (or outer?)
+ - Trilinear sw filter to save memory?
+ - Use compute shaders to process page id feedback buffer
+ - Explore virtual decals?
+ - Compress the indirection texture to save mem?
+ - Maybe unnormalized texture coordinates can be useful? [0,texWidth),[0,texHeight)?
+
+=============== MISC ===============
+
+- Use gamma-correct rendering
+  Textures and framebuffer in sRGB (gamma)
+  Rendering pipeline is linear (every shader used linear until it writes to the sRGB framebuffer)
+  Use float formats for intermediate results (RGBAF)
+
+- Query the uniform variables from the shader compiler
+
+- VkPipelineShaderStageCreateInfo::VkSpecializationInfo seem interesting, should give it a try!
+  It allows specifying values for constants without having to recompile the shader ourselves!
+
+- Swap chain re-creation (needed for proper window resize!)
+- better GPU selection (don't just grab GPU 0, try to find the best match)
+
+- Interesting RENDERDOC debug marker sample:
+- https://www.saschawillems.de/?page_id=2017
+- https://github.com/SaschaWillems/Vulkan/blob/master/debugmarker/debugmarker.cpp
+
+====================================

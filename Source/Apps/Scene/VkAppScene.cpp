@@ -2,17 +2,12 @@
 // ================================================================================================
 // File: Apps/Scene/VkAppScene.cpp
 // Author: Guilherme R. Lampert
-// Created on: 09/04/17
+// Created on: 13/05/17
+// Brief: The famous Crytek Sponza scene.
 // ================================================================================================
 
 #include "Apps/VulkanDemoApp.hpp"
-#include "VkToolbox/ResourceManager.hpp"
-#include "VkToolbox/DescriptorSets.hpp"
-#include "VkToolbox/PipelineState.hpp"
-#include "VkToolbox/GlslShader.hpp"
-#include "VkToolbox/Buffers.hpp"
-#include "VkToolbox/Texture.hpp"
-#include "VkToolbox/Mesh.hpp"
+#include "VkToolbox/Model3D.hpp"
 #include "VkToolbox/Input.hpp"
 #include "VkToolbox/Camera.hpp"
 
@@ -31,7 +26,7 @@ private:
     using FencePtr  = std::unique_ptr<Fence>;
 
     // One buffer for each frame in flight 
-    //(assuming the context was created with triple buffering).
+    // (assuming the context was created with triple buffering).
     CommandPool              m_cmdPool;
     std::array<BufferPtr, 3> m_cmdBuffers;
     std::array<FencePtr,  3> m_cmdBufferFences;
@@ -40,7 +35,7 @@ private:
     int                      m_nextCmdBufferIndex    = 0;
 
     // Shading pipeline state:
-    const char *             m_shaderFilename = VKTB_SHADER_SOURCE_PATH "Teapot.glsl";
+    const char *             m_shaderFilename = VKTB_SHADER_SOURCE_PATH "Teapot.glsl"; // TODO temp shader for testing...
     GlslShader               m_shaderProgram;
     DescriptorSetPool        m_descriptorSetPool;
     DescriptorSetLayout      m_descriptorSetLayout;
@@ -66,7 +61,7 @@ private:
     const char * m_textureName = VKTB_TEXTURES_PATH "Common/default.png";
     Texture      m_texture;
     Sampler      m_sampler;
-    Mesh         m_mesh;
+    Model3D      m_worldModel;
 
 private:
 
@@ -74,6 +69,7 @@ private:
     void initPipeline();
     void initTexture();
     void initVertexBuffer();
+    void initInput();
 
     void updateInput();
     void updateBuffers(CommandBuffer & cmdBuff);
@@ -106,6 +102,7 @@ VkAppScene::VkAppScene(const StartupOptions & options)
     , m_indexBuffer{ context() }
     , m_texture{ context(), m_textureName }
     , m_sampler{ context() }
+    , m_worldModel{ context(), VKTB_MESH_MODELS_PATH "Sponza/sponza.bmesh" }
 {
     GlslShaderManager::initialize(context());
     TextureManager::initialize(context());
@@ -130,35 +127,14 @@ VkAppScene::VkAppScene(const StartupOptions & options)
     initDescriptorSets();
     initPipeline();
     initVertexBuffer();
+    initInput();
 
     context().setDefaultClearColor({ 0.4f, 0.4f, 0.4f, 1.0f });
-
-    // Quit on [ESCAPE]
-    window().onVirtKeyPress = [this](unsigned keyCode)
-    {
-        if (keyCode == Key::VK_ESCAPE)
-        {
-            window().setStopEventLoop(true);
-        }
-    };
-
-    // Position adjusted for the Sponza scene.
-    m_camera.setup(float(context().framebufferSize().width),
-                   float(context().framebufferSize().height),
-                   60.0f, 0.1f, 1000.0f,
-                   { 0.0f, 0.0f, 1.0f },  // right
-                   { 0.0f, 1.0f, 0.0f },  // up
-                   {-1.0f, 0.0f, 0.0f },  // forward
-                   { 0.0f, 1.0f, 0.0f }); // eye
-
-    MouseState::hideCursor(true);
-    MouseState::setCursorPos(m_window.size().width  / 2,
-                             m_window.size().height / 2,
-                             &m_window);
 }
 
 VkAppScene::~VkAppScene()
 {
+    MouseState::hideCursor(false);
     TextureManager::shutdown();
     GlslShaderManager::shutdown();
 }
@@ -247,24 +223,6 @@ void VkAppScene::initPipeline()
 
 void VkAppScene::initTexture()
 {
-    //*
-    JobQueuePool jp;
-    jp.initialize();
-
-    TextureManager::preallocate(64);
-    TextureManager::beginResourceLoad();
-    
-    TextureManager::ResourceIndex t0,t1;
-    TextureManager::registerSlot(StrId<str>{VKTB_TEXTURES_PATH "Common/default.png"}, &t0);
-    TextureManager::registerSlot(StrId<str>{VKTB_TEXTURES_PATH "Common/lenna.png"},   &t1);
-
-    TextureManager::pushAsyncLoadRequest(t0);
-    TextureManager::pushAsyncLoadRequest(t1);
-    TextureManager::waitPendingAsyncLoadRequests();
-
-    TextureManager::endResourceLoad();
-    //*/
-
     m_sampler.initialize(Sampler::defaults());
 
     const auto & cmdBuff = context().mainTextureStagingCmdBuffer();
@@ -282,16 +240,51 @@ void VkAppScene::initTexture()
 
 void VkAppScene::initVertexBuffer()
 {
-    m_mesh.initFromFile("sponza.bmesh", 0.1f);
+    // Slow path to created the precompiled binary file if not there.
+    // This will run the first time and cache the fast binary file. 
+    // Collada loading is painstakingly slow...
+    if (!probeFile(VKTB_MESH_MODELS_PATH "Sponza/sponza.bmesh"))
+    {
+        Log::debugF("Loading collada file and saving optimized binary mesh...");
 
-    m_vertexBuffer.initialize(m_mesh.vertexCount());
-    m_indexBuffer.initialize(m_mesh.indexCount());
+        Mesh temp;
+        temp.initFromFile(VKTB_MESH_MODELS_PATH "Sponza/sponza.dae", 0.1f);
+        temp.saveBinary(VKTB_MESH_MODELS_PATH "Sponza/sponza.bmesh");
+    }
 
-    m_vertexBuffer.writeN(make_array_view(m_mesh.vertexes));
-    m_indexBuffer.writeN(make_array_view(m_mesh.indexes));
+    TextureManager::preallocate(128);
+    TextureManager::beginResourceLoad();
 
-    assert(m_vertexBuffer.elementCount() == m_mesh.vertexCount());
-    assert(m_indexBuffer.elementCount()  == m_mesh.indexCount());
+    m_worldModel.load();
+
+    TextureManager::waitPendingAsyncLoadRequests();
+    TextureManager::endResourceLoad();
+}
+
+void VkAppScene::initInput()
+{
+    // Quit on [ESCAPE]
+    window().onVirtKeyPress = [this](unsigned keyCode)
+    {
+        if (keyCode == Key::VK_ESCAPE)
+        {
+            window().setStopEventLoop(true);
+        }
+    };
+
+    // Position adjusted for the Sponza scene.
+    m_camera.setup(float(context().framebufferSize().width),
+                   float(context().framebufferSize().height),
+                   60.0f, 0.1f, 1000.0f,
+                   { 0.0f, 0.0f, 1.0f },  // right
+                   { 0.0f, 1.0f, 0.0f },  // up
+                   {-1.0f, 0.0f, 0.0f },  // forward
+                   { 0.0f, 1.0f, 0.0f }); // eye
+
+    MouseState::hideCursor(true);
+    MouseState::setCursorPos(m_window.size().width  / 2,
+                             m_window.size().height / 2,
+                             &m_window);
 }
 
 void VkAppScene::updateInput()
@@ -318,16 +311,7 @@ void VkAppScene::updateInput()
 
 void VkAppScene::updateBuffers(CommandBuffer & cmdBuff)
 {
-    // Since the geometry never changes, we don't need to issue
-    // a GPU copy command more than once!
-    static bool s_vbUploadedToGpu = false;
-
-    if (!s_vbUploadedToGpu)
-    {
-        m_vertexBuffer.uploadStagingToGpu(cmdBuff);
-        m_indexBuffer.uploadStagingToGpu(cmdBuff);
-        s_vbUploadedToGpu = true;
-    }
+    m_worldModel.uploadBuffersToGpu(cmdBuff);
 
     //
     // Uniform buffer per-frame update:
@@ -353,10 +337,7 @@ void VkAppScene::prepareCommandBuffer(CommandBuffer & cmdBuff)
     const auto descriptorSet = make_array_view(m_descriptorSet.descriptorSetHandles);
     context().bindGraphicsDescriptorSets(cmdBuff, m_pipelineStateLayout, descriptorSet);
 
-    context().bindVertexBuffer(cmdBuff, m_vertexBuffer);
-    context().bindIndexBuffer(cmdBuff, m_indexBuffer, vkIndexTypeForBuffer(m_indexBuffer));
-
-    context().drawIndexed(cmdBuff, m_indexBuffer.elementCount(), 1, 0, 0, 0);
+    m_worldModel.drawInstance(cmdBuff);
 
     context().endRenderPass(cmdBuff);
 

@@ -1,2 +1,2 @@
 # VulkanDemo
-My Vulkan tests/demos.
+My Vulkan tests & demos.
