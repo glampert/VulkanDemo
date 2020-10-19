@@ -1,2 +1,2 @@
 # VulkanDemo
-My Vulkan tests & demos.
+Vulkan tests and learning project.
